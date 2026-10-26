@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Stride" xmlns="http://www.topografix.com/GPX/1/1">
+  <trk>
+    <name>Demo Run</name>
+    <trkseg>
+      <trkpt lat="37.7749" lon="-122.4194"><ele>15</ele></trkpt>
+      <trkpt lat="37.7756" lon="-122.4180"><ele>16</ele></trkpt>
+      <trkpt lat="37.7764" lon="-122.4168"><ele>16</ele></trkpt>
+      <trkpt lat="37.7773" lon="-122.4159"><ele>17</ele></trkpt>
+      <trkpt lat="37.7784" lon="-122.4154"><ele>16</ele></trkpt>
+      <trkpt lat="37.7795" lon="-122.4158"><ele>15</ele></trkpt>
+      <trkpt lat="37.7804" lon="-122.4170"><ele>15</ele></trkpt>
+      <trkpt lat="37.7808" lon="-122.4186"><ele>14</ele></trkpt>
+      <trkpt lat="37.7802" lon="-122.4202"><ele>14</ele></trkpt>
+      <trkpt lat="37.7791" lon="-122.4212"><ele>15</ele></trkpt>
+      <trkpt lat="37.7778" lon="-122.4216"><ele>15</ele></trkpt>
+      <trkpt lat="37.7765" lon="-122.4210"><ele>15</ele></trkpt>
+      <trkpt lat="37.7754" lon="-122.4202"><ele>15</ele></trkpt>
+      <trkpt lat="37.7749" lon="-122.4194"><ele>15</ele></trkpt>
+    </trkseg>
+  </trk>
+</gpx>
