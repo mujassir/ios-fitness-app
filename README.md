@@ -49,6 +49,6 @@ Sessions are merged across short gaps and only listed if they last long enough (
 
 | | |
 | --- | --- |
-| Bundle ID | `com.mujassir.stride` |
+| Bundle ID | `com.mujassir.runcheck` |
 | Project spec | `project.yml` (XcodeGen) |
 | License | [Apache 2.0](LICENSE) |

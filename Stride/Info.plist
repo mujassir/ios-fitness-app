@@ -26,8 +26,6 @@
 	<string>public.app-category.healthcare-fitness</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
-	<key>NSHealthClinicalHealthRecordsUsageDescription</key>
-	<string>Stride does not read clinical records. This description is required because HealthKit is enabled on this iPhone build.</string>
 	<key>NSHealthShareUsageDescription</key>
 	<string>Stride reads your steps, distance, and energy so it can show daily walking and running progress.</string>
 	<key>NSHealthUpdateUsageDescription</key>

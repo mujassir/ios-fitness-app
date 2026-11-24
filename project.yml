@@ -26,7 +26,7 @@ targets:
           - Stride.entitlements
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.mujassir.stride
+        PRODUCT_BUNDLE_IDENTIFIER: com.mujassir.runcheck
         PRODUCT_NAME: Stride
         MARKETING_VERSION: "1.0.0"
         CURRENT_PROJECT_VERSION: "1"
@@ -49,7 +49,6 @@ targets:
       path: Stride/Stride.entitlements
       properties:
         com.apple.developer.healthkit: true
-        com.apple.developer.healthkit.access: [health-records]
         com.apple.developer.healthkit.background-delivery: true
 schemes:
   Stride:
