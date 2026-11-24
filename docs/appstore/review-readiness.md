@@ -1,6 +1,6 @@
 # App Review readiness: RunCheck 1.0.0 (build 2)
 
-Checked on November 25, 2026 against the App Review Guidelines and the code. The App Store Connect record still needs checking (sign-in required).
+Checked on November 25, 2026 against the App Review Guidelines, the code and the App Store Connect record (app ID 6838771772). What's entered there is in `metadata.md`.
 
 ## Lessons from this review prep
 
@@ -21,19 +21,22 @@ Checked on November 25, 2026 against the App Review Guidelines and the code. The
 | Network, SDKs, tracking | 5.1.1, 5.1.2 | OK. No URLSession, no third-party packages. |
 | Privacy manifest | ITMS-91053 | **Fixed.** UserDefaults CA92.1 declared; no collected data; tracking false. |
 | Privacy policy link in the app | 5.1.1(i) | **Fixed.** You → About → Privacy Policy and Support. |
-| Privacy policy and support pages are live | 5.1.1(i), 1.5 | **To do (you):** turn on GitHub Pages (see below). The pages are written in `docs/`. URLs: `https://mujassir.github.io/ios-fitness-app/privacy` and `/support`. |
+| Privacy policy and support pages are live | 5.1.1(i), 1.5 | **To do.** Both return 404: `docs/` isn't committed or pushed, and GitHub Pages is off. Commit, push to `main`, then turn on Pages from `main` → `/docs`. URLs are already entered in App Store Connect. |
 | Export compliance | — | OK. `ITSAppUsesNonExemptEncryption = NO`. |
 | Release build hygiene | ITMS-91306 | OK. `MTL_ENABLE_DEBUG_INFO = NO` in Release. Build 2 is above build 1. |
-| Mac / Vision Pro | 2.4.5 | OK in the project. **To do (you):** turn both off in Pricing and Availability (ITMS-90863 / 90984 notices). |
+| Mac / Vision Pro | 2.4.5 | OK. Off in the project and in Pricing and Availability. |
 | Accounts, IAP, user content | 5.1.1(v), 3.1.1, 1.2 | Not applicable. |
 | Medical claims | 1.4.1 | OK. Stats only, no medical advice. |
-| Screenshots (6.1"/6.3" or 6.9" iPhone slot) | 2.3.3 | **To check** in App Store Connect. |
-| Name, subtitle, keywords, description | 2.3.1, 2.3.7 | **To check.** No other apps' names. Don't mention GPS routes or saving workouts. Don't put "Apple Health" in the name or subtitle. |
-| Content Rights, age rating | — | **To check.** |
-| App Privacy answers **Published** (Data Not Collected) | 5.1.1 | **To do (you)** after the check. Publishing is your attestation. |
-| Build 2 attached to version 1.0.0 | — | **To do** once processing finishes. |
-| Review notes | 2.1 | **Done.** `docs/appstore/review-notes.md`, 3,091 characters, answers all six points. |
+| Screenshots (iPhone slot: 1206 × 2622 or 1179 × 2556) | 2.3.3 | **To do (you).** Slot is empty. iPhone only; no iPad slot needed. |
+| Name, subtitle, keywords, description | 2.3.1, 2.3.7 | **Done.** Promotional text, description, keywords, support URL and copyright entered (`metadata.md`). No other apps' names, no GPS or workout saving, "Apple Health" only in the description. |
+| Content Rights, age rating, category | 1.3 | **Done.** No third-party content. Age rating 4+ (all None / No). Health & Fitness, Sports. |
+| App Privacy answers **Published** (Data Not Collected) | 5.1.1 | Answered "Data Not Collected" and privacy URL saved. **To do (you):** click **Publish** on App Privacy. |
+| Build 2 attached to version 1.0.0 | — | **Done.** The version was created as "1.0", which hid the 1.0.0 builds; it's now 1.0.0 and build 2 is attached. |
+| Review notes | 2.1 | **Done.** Entered in App Store Connect from `review-notes.md` (3,090 characters, all six points). Sign-in required is off. |
 | Screen recording attachment | 2.1 | **To do (you).** See below. |
+| App Review contact (name, phone, email) | 2.1 | **To do (you).** Empty in App Store Connect; required to submit. |
+| Pricing and availability | — | **Done.** Free; 147 countries or regions (no EU, no China mainland), like the other apps on this account. |
+| Regulated Medical Device declaration | — | **To do (you).** App Compliance asks every Health & Fitness app. RunCheck isn't one: it shows activity stats and gives no diagnosis or treatment. |
 
 ## Screen recording: what to record
 
