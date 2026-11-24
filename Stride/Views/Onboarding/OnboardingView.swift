@@ -14,9 +14,9 @@ struct OnboardingView: View {
                 .symbolRenderingMode(.hierarchical)
                 .padding(.bottom, 24)
 
-            Text("Stride")
+            Text("RunCheck")
                 .font(.system(size: 42, weight: .bold, design: .rounded))
-            Text("Walk, jog, and run — counted and mapped on iPhone.")
+            Text("Your walks, jogs, and runs — from Apple Health.")
                 .font(.title3)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -30,14 +30,14 @@ struct OnboardingView: View {
                     detail: "Read today’s steps and walking distance from Apple Health."
                 )
                 OnboardingRow(
-                    symbol: "map.fill",
-                    title: "GPS workouts",
-                    detail: "Start a walk, jog, or run and keep a live route, pace, and splits."
+                    symbol: "figure.run",
+                    title: "Walk, jog, and run sessions",
+                    detail: "Sorts your movement by speed and lists real sessions, not indoor wandering."
                 )
                 OnboardingRow(
                     symbol: "heart.fill",
-                    title: "Saved to Health",
-                    detail: "Finished sessions write back to Apple Health on this iPhone."
+                    title: "Private by design",
+                    detail: "RunCheck only reads Apple Health. Nothing leaves your iPhone."
                 )
             }
             .padding(24)

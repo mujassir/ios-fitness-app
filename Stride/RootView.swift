@@ -33,9 +33,5 @@ struct MainTabView: View {
                 SettingsView()
             }
         }
-        .fullScreenCover(isPresented: Bindable(model.session).isLivePresented) {
-            LiveWorkoutView()
-                .interactiveDismissDisabled()
-        }
     }
 }
