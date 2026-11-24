@@ -1,27 +1,65 @@
-# Stride
+# RunCheck: Walk & Run Stats
 
-iPhone app for walk, jog, and run stats from Apple Health.
+RunCheck turns the steps and workouts already in Apple Health into clear walk, jog and run stats on iPhone. It sorts your movement by speed, lists real sessions (not pacing around the house), and shows daily, weekly and monthly totals.
 
-Stride classifies movement by speed, lists real sessions (not indoor wandering), and shows day, week, and month totals. Built with SwiftUI for iOS 18.
+No account, no internet, no ads. RunCheck only reads Apple Health, and your data never leaves your iPhone.
+
+<p align="center">
+  <img src="docs/screenshots/week.jpg" width="160" alt="Week view with the daily step ring">
+  <img src="docs/screenshots/sessions.jpg" width="160" alt="Sessions list and walk, jog and run tiles">
+  <img src="docs/screenshots/run-detail.jpg" width="160" alt="Run detail with distance, steps, pace and speed">
+  <img src="docs/screenshots/month.jpg" width="160" alt="Month totals with week tiles">
+  <img src="docs/screenshots/you.jpg" width="160" alt="You tab with step goal, units and pace settings">
+</p>
 
 ## Features
 
-- **Stats**
-  - **Today** — steps, distance, energy, and walk / jog / run for the current day
-  - **Week** — Sunday–Saturday calendar week, swipe between weeks, tap a day
-  - **Month** — month totals plus week tiles (newest first); tap a week to open it
-- **Sessions** — listed walks, jogs, and runs with a detail screen (speed, pace, tempo, graph)
-- **You** — step goal, units, speed thresholds, and session rules (min duration and join gaps)
+### Stats
+- **Today**: a step ring against your daily goal, plus distance, energy and active time.
+- **Week**: Sunday to Saturday. Swipe between weeks and tap a day to see it.
+- **Month**: monthly totals, then a tile for each week (newest first). Tap a week to open it.
+- **Walk, jog and run tiles**: time, pace, energy, steps and number of sessions for each kind. A tile hides when there's nothing for that kind.
 
-Walk, jog, and run tiles hide when that kind has no data. Walk sessions only list a steady walk, not pacing around home or the office.
+### Sessions
+- Walks, jogs and runs found in Apple Health, listed with distance and duration.
+- A detail screen for each session: distance, steps, energy, average pace, and the average, minimum and maximum for speed, pace and tempo (steps per minute), with a speed graph.
+- Walk sessions only count steady walks, so moving around at home or in the office stays in the Walk tile and isn't listed.
+
+### You
+- **Daily goal**: step goal from 1,000 to 40,000.
+- **Units**: kilometres or miles, and body weight (used to estimate energy).
+- **Pace**: the speeds where a jog and a run start.
+- **Sessions**: the minimum length and the join window for walks, jogs and runs.
+- **Apple Health**: access status, and a shortcut to manage it in the Health app.
+- **About**: Privacy Policy and Support links.
+
+## How activity is classified
+
+Defaults, all editable in **You**:
+
+| Kind | Speed | Minimum session | Breaks joined if shorter than |
+|---|---|---|---|
+| Walk | under 5 km/h | 10 min | 2 min |
+| Jog | 5 to 8 km/h | 5 min | 30 s |
+| Run | over 8 km/h | 5 min | 10 s |
+
+Health data is loaded into memory on launch and when you pull to refresh. Switching between Today, Week and Month doesn't query Health again. HealthKit background delivery refreshes step totals when Health gets new data.
+
+## Privacy
+
+- **Read only.** RunCheck reads steps, walking and running distance, walking and running speed, active energy, exercise minutes and workouts. It never writes to Apple Health.
+- **Nothing leaves the iPhone.** No network requests, servers, accounts, analytics, ads or third-party SDKs. Health data isn't stored in iCloud.
+- **Settings** (goal, units, weight, thresholds) are saved on the device.
+
+App Store privacy label: **Data Not Collected**. Full policy: [mujassir.github.io/ios-fitness-app/privacy](https://mujassir.github.io/ios-fitness-app/privacy). Support: [mujassir.github.io/ios-fitness-app/support](https://mujassir.github.io/ios-fitness-app/support).
 
 ## Requirements
 
-- macOS with Xcode 16+
-- iOS 18 iPhone (HealthKit; a physical device works best)
-- Apple ID / development team for signing
+- macOS with Xcode 16 or later, and [XcodeGen](https://github.com/yonaskolb/XcodeGen)
+- An iPhone running iOS 18 or later (HealthKit works best on a real device with Health data)
+- An Apple developer team for signing (HealthKit needs a signed build)
 
-## Run
+## Build and run
 
 ```bash
 brew install xcodegen   # if needed
@@ -29,26 +67,22 @@ xcodegen generate
 open Stride.xcodeproj
 ```
 
-Select your development team in Xcode, then run on a device. On first launch, allow Health access for steps, distance, walking/running speed, energy, and workouts.
+Choose your development team in Xcode, then run on an iPhone. On first launch, tap **Continue**, then **Turn On All** and **Allow** on the Health sheet. Pull down on Stats to refresh.
 
-Pull to refresh Stats after granting access.
-
-## How activity is classified
-
-Defaults (editable in **You**):
-
-| Kind | Speed |
-| --- | --- |
-| Walk | under 5 km/h |
-| Jog | 5–8 km/h |
-| Run | over 8 km/h |
-
-Sessions are merged across short gaps and only listed if they last long enough (walk 10 min, jog/run 5 min by default). Health data is loaded into memory on launch and refresh; switching Today / Week / Month does not query Health again.
+`project.yml` is the source of truth. Edit it, not the `.xcodeproj`, then run `xcodegen generate` again.
 
 ## Project
 
 | | |
-| --- | --- |
+|---|---|
+| App Store name | RunCheck: Walk & Run Stats |
 | Bundle ID | `com.mujassir.runcheck` |
-| Project spec | `project.yml` (XcodeGen) |
+| Version | 1.0.0 (build 2), iPhone only |
+| Project spec | `project.yml` (XcodeGen). The target and folder are still called `Stride`, the app's working name |
+| Store and review docs | [`docs/appstore/`](docs/appstore) (metadata, review notes, readiness checklist) |
+| Website | [`docs/`](docs), published with GitHub Pages |
 | License | [Apache 2.0](LICENSE) |
+
+### Not in 1.0
+
+GPS workout recording (the Move and Log screens, live routes and saving workouts to Health) is in the repo but excluded from the 1.0 target in `project.yml`. It needs location access and Health write access, which 1.0 doesn't ask for. It's planned for a later version.
