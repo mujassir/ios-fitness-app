@@ -93,28 +93,25 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                Section("Workouts") {
-                    Toggle("Auto-pause", isOn: Bindable(model.settings).autoPause)
-                    Text("Pauses a session if you stand still for a few seconds, then resumes when you start moving.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-
                 Section("Apple Health") {
                     LabeledContent("Available") {
                         Text(model.health.isAvailable ? "Yes" : "No")
                     }
                     LabeledContent("Access") {
-                        Text(model.health.isAuthorized ? "Allowed" : "Not granted")
+                        Text(model.health.isAuthorized ? "Set up" : "Not set up")
                     }
                     Button {
-                        Task {
-                            await model.health.requestAuthorization()
-                            await model.refresh()
+                        if model.health.isAuthorized {
+                            model.health.openHealthApp()
+                        } else {
+                            Task {
+                                await model.health.requestAuthorization()
+                                await model.refresh()
+                            }
                         }
                     } label: {
                         HStack {
-                            Text(model.health.isRequesting ? "Waiting for Health…" : "Request Health access")
+                            Text(healthButtonTitle)
                             if model.health.isRequesting {
                                 Spacer()
                                 ProgressView()
@@ -130,15 +127,22 @@ struct SettingsView: View {
                 }
 
                 Section("About") {
-                    LabeledContent("App", value: "Stride")
+                    LabeledContent("App", value: "RunCheck")
                     LabeledContent("Platform", value: "iPhone")
-                    Text("Tracks daily steps plus walk, jog, and run sessions with GPS, pace, and Apple Health.")
+                    Link("Privacy Policy", destination: URL(string: "https://mujassir.github.io/ios-fitness-app/privacy")!)
+                    Link("Support", destination: URL(string: "https://mujassir.github.io/ios-fitness-app/support")!)
+                    Text("Shows daily steps plus walk, jog, and run sessions from Apple Health.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
             }
             .navigationTitle("You")
         }
+    }
+
+    private var healthButtonTitle: String {
+        if model.health.isRequesting { return "Waiting for Health…" }
+        return model.health.isAuthorized ? "Manage access in Health" : "Allow Health access"
     }
 
     private func sessionKindLabel(_ kind: ActivityKind, summary: String) -> some View {

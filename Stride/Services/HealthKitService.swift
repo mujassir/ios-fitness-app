@@ -1,4 +1,3 @@
-import CoreLocation
 import Foundation
 import HealthKit
 import UIKit
@@ -38,25 +37,6 @@ final class HealthKitService {
         return types
     }
 
-    private var shareTypes: Set<HKSampleType> {
-        Set([
-            HKQuantityType(.stepCount),
-            HKQuantityType(.distanceWalkingRunning),
-            HKQuantityType(.activeEnergyBurned),
-            HKObjectType.workoutType(),
-            HKSeriesType.workoutRoute()
-        ])
-    }
-
-    private var writeTypesToCheck: [HKObjectType] {
-        [
-            HKObjectType.workoutType(),
-            HKQuantityType(.stepCount),
-            HKQuantityType(.distanceWalkingRunning),
-            HKQuantityType(.activeEnergyBurned)
-        ]
-    }
-
     init() {
         refreshAuthorizationStatus()
     }
@@ -73,7 +53,7 @@ final class HealthKitService {
 
         do {
             try await requestHealthAccess()
-            refreshAuthorizationStatus()
+            await updateAuthorizationStatus()
             if isAuthorized {
                 lastError = nil
             } else {
@@ -87,14 +67,23 @@ final class HealthKitService {
     }
 
     func refreshAuthorizationStatus() {
-        isAuthorized = writeTypesToCheck.contains {
-            store.authorizationStatus(for: $0) == .sharingAuthorized
+        Task { await updateAuthorizationStatus() }
+    }
+
+    /// HealthKit never reveals whether read access was granted, so "authorized"
+    /// here means the person has already answered the Health permission sheet.
+    private func updateAuthorizationStatus() async {
+        guard isAvailable else {
+            isAuthorized = false
+            return
         }
+        let status = try? await store.statusForAuthorizationRequest(toShare: [], read: readTypes)
+        isAuthorized = status == .unnecessary
     }
 
     private func requestHealthAccess() async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            store.requestAuthorization(toShare: shareTypes, read: readTypes) { _, error in
+            store.requestAuthorization(toShare: [], read: readTypes) { _, error in
                 if let error {
                     continuation.resume(throwing: error)
                 } else {
@@ -265,70 +254,7 @@ final class HealthKitService {
         store.execute(workoutQuery)
     }
 
-    func saveWorkout(
-        kind: ActivityKind,
-        start: Date,
-        end: Date,
-        duration: TimeInterval,
-        distanceMeters: Double,
-        calories: Double,
-        locations: [CLLocation]
-    ) async {
-        guard isAvailable, isAuthorized else { return }
-
-        let configuration = HKWorkoutConfiguration()
-        configuration.activityType = kind.healthKitActivityType
-        configuration.locationType = .outdoor
-
-        let builder = HKWorkoutBuilder(healthStore: store, configuration: configuration, device: .local())
-
-        do {
-            try await builder.beginCollection(at: start)
-
-            var samples: [HKSample] = []
-            if distanceMeters > 0 {
-                let quantity = HKQuantity(unit: .meter(), doubleValue: distanceMeters)
-                samples.append(
-                    HKQuantitySample(
-                        type: HKQuantityType(.distanceWalkingRunning),
-                        quantity: quantity,
-                        start: start,
-                        end: end
-                    )
-                )
-            }
-            if calories > 0 {
-                let quantity = HKQuantity(unit: .kilocalorie(), doubleValue: calories)
-                samples.append(
-                    HKQuantitySample(
-                        type: HKQuantityType(.activeEnergyBurned),
-                        quantity: quantity,
-                        start: start,
-                        end: end
-                    )
-                )
-            }
-
-            if !samples.isEmpty {
-                try await builder.addSamples(samples)
-            }
-
-            try await builder.endCollection(at: end)
-            guard let workout = try await builder.finishWorkout() else {
-                throw HealthKitServiceError.saveFailed
-            }
-
-            if locations.count >= 2 {
-                let routeBuilder = HKWorkoutRouteBuilder(healthStore: store, device: .local())
-                try await routeBuilder.insertRouteData(locations)
-                _ = try await routeBuilder.finishRoute(with: workout, metadata: nil)
-            }
-        } catch {
-            lastError = error.localizedDescription
-        }
-    }
-
-    private func openHealthApp() {
+    func openHealthApp() {
         guard let url = URL(string: "x-apple-health://") else { return }
         UIApplication.shared.open(url)
     }
