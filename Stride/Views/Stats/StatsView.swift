@@ -370,6 +370,14 @@ private struct StatsBreakdownStack: View {
                     title: "Apple Health unavailable",
                     detail: "Walk, jog, and run stats are read from Health on this iPhone."
                 )
+            } else if model.health.accessLikelyMissing {
+                PermissionBanner(
+                    title: "No Health data",
+                    detail: "RunCheck can't read any steps or workouts. In Health, tap your profile, then Apps → RunCheck, and turn on all categories.",
+                    actionTitle: "Open Health"
+                ) {
+                    model.health.openHealthApp()
+                }
             } else if breakdown.isEmpty && model.health.todaySteps == 0 && !model.health.isAuthorized {
                 PermissionBanner(
                     title: "Connect Apple Health",

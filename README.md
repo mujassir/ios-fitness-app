@@ -2,7 +2,7 @@
 
 RunCheck turns the steps and workouts already in Apple Health into clear walk, jog and run stats on iPhone. It sorts your movement by speed, lists real sessions (not pacing around the house), and shows daily, weekly and monthly totals.
 
-No account, no internet, no ads. RunCheck only reads Apple Health, and your data never leaves your iPhone.
+No account, no ads, works offline. RunCheck only reads Apple Health, and your data never leaves your iPhone.
 
 <p align="center">
   <img src="docs/screenshots/week.jpg" width="160" alt="Week view with the daily step ring">
@@ -48,7 +48,8 @@ Health data is loaded into memory on launch and when you pull to refresh. Switch
 ## Privacy
 
 - **Read only.** RunCheck reads steps, walking and running distance, walking and running speed, active energy, exercise minutes and workouts. It never writes to Apple Health.
-- **Nothing leaves the iPhone.** No network requests, servers, accounts, analytics, ads or third-party SDKs. Health data isn't stored in iCloud.
+- **Nothing leaves the iPhone.** No servers, accounts, analytics, ads or third-party SDKs. Health data isn't stored in iCloud.
+- **Update check.** About once a day RunCheck asks Apple's App Store lookup service (`itunes.apple.com/lookup`) for its latest version number and offers to open the App Store if a newer one is out. The request carries only the app's App Store ID and a country code. It's the only network request the app makes.
 - **Settings** (goal, units, weight, thresholds) are saved on the device.
 
 App Store privacy label: **Data Not Collected**. Full policy: [mujassir.github.io/ios-fitness-app/privacy](https://mujassir.github.io/ios-fitness-app/privacy). Support: [mujassir.github.io/ios-fitness-app/support](https://mujassir.github.io/ios-fitness-app/support).

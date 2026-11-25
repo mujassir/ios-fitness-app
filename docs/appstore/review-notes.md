@@ -7,7 +7,7 @@ Paste everything inside the block into **App Review Information → Notes** (pla
 Attached in the App Review attachments: recorded on a physical iPhone running the latest iOS. It starts by launching RunCheck from the Home Screen and shows onboarding, the Apple Health permission sheet, the Stats tab (Today, Week and Month, the step ring, and the walk, jog and run sessions with their details), and the You tab (step goal, units, speed thresholds, Apple Health status, and the Privacy Policy link). RunCheck has no accounts, no user-generated content and no paid content.
 
 2. PURPOSE AND TARGET AUDIENCE
-RunCheck is a stats app for people who walk, jog or run and want a simple, private view of that activity. It reads the data their iPhone and Apple Watch already save to Apple Health, sorts movement into walk, jog and run sessions by speed, and shows daily, weekly and monthly totals. Casual indoor steps are kept separate from real sessions. There is no account, subscription or internet connection.
+RunCheck is a stats app for people who walk, jog or run and want a simple, private view of that activity. It reads the data their iPhone and Apple Watch already save to Apple Health, sorts movement into walk, jog and run sessions by speed, and shows daily, weekly and monthly totals. Casual indoor steps are kept separate from real sessions. There is no account or subscription, and it works offline.
 
 3. SETUP AND MAIN FEATURES
 No login is needed. No sample files are needed.
@@ -18,7 +18,7 @@ c) Stats tab: switch between Today, Week and Month. The ring shows steps against
 d) You tab: change the step goal, units, body weight (used to estimate energy) and the jog and run speed thresholds. The Stats tab updates right away. "Manage access in Health" opens the Health app. Privacy Policy and Support links are at the bottom.
 
 4. EXTERNAL SERVICES
-None. RunCheck makes no network requests and includes no third-party SDKs, analytics, advertising, authentication, payment or AI services. Everything runs on the device using Apple frameworks (HealthKit, SwiftUI, Swift Charts).
+None. The only network request is an update check to Apple's App Store lookup service (itunes.apple.com/lookup, app ID and country code only), at most once a day, which shows an "Update available" alert linking to the App Store. RunCheck includes no third-party SDKs, analytics, advertising, authentication, payment or AI services. Everything runs on the device using Apple frameworks (HealthKit, SwiftUI, Swift Charts).
 
 5. REGIONAL DIFFERENCES
 None. The app works the same in every region where it is available. Distance can be shown in kilometres or miles.

@@ -4,6 +4,7 @@ struct PermissionBanner: View {
     let title: String
     let detail: String
     var isWorking = false
+    var actionTitle = "Allow access"
     var action: (() -> Void)? = nil
 
     var body: some View {
@@ -20,7 +21,7 @@ struct PermissionBanner: View {
                             ProgressView()
                                 .controlSize(.small)
                         }
-                        Text(isWorking ? "Waiting for Health…" : "Allow access")
+                        Text(isWorking ? "Waiting for Health…" : actionTitle)
                     }
                 }
                 .buttonStyle(.borderedProminent)

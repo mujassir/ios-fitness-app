@@ -18,6 +18,8 @@ final class HealthKitService {
     var isRequesting = false
     var isLoadingStats = false
     var lastError: String?
+    /// True once stats have been read from Health at least once this launch.
+    private(set) var hasLoadedStats = false
     private var loadedFrom: Date = .distantFuture
 
     var isAvailable: Bool {
@@ -64,6 +66,30 @@ final class HealthKitService {
             isAuthorized = false
             lastError = readableHealthError(error)
         }
+    }
+
+    /// Shows the Health sheet again if any read type is still unanswered
+    /// (the sheet was dismissed, or this version reads a new type).
+    func requestAuthorizationIfNeeded() async {
+        guard isAvailable, !isRequesting else { return }
+        await updateAuthorizationStatus()
+        guard !isAuthorized else { return }
+        await requestAuthorization()
+    }
+
+    /// Health returned nothing at all. Because HealthKit hides read denials,
+    /// this is the only sign that access was turned off.
+    var hasAnyHealthData: Bool {
+        todaySteps > 0
+            || weeklySteps.contains { $0.steps > 0 }
+            || dailyMetrics.contains { $0.hasActivity }
+            || !rawBins.isEmpty
+            || !rawWorkouts.isEmpty
+    }
+
+    /// Access was answered but no data comes back, so access is probably off.
+    var accessLikelyMissing: Bool {
+        isAvailable && isAuthorized && hasLoadedStats && !isLoadingStats && !hasAnyHealthData
     }
 
     func refreshAuthorizationStatus() {
@@ -124,6 +150,7 @@ final class HealthKitService {
         dailyMetrics = await days
         rawBins = await bins
         loadedFrom = origin
+        hasLoadedStats = true
         if dailyMetrics.contains(where: { $0.hasActivity }) || !rawBins.isEmpty || !rawWorkouts.isEmpty {
             lastError = nil
         }

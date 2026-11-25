@@ -15,6 +15,10 @@ What's entered in App Store Connect (app ID 6838771772), so it can be reused for
 | Content rights | Does not contain, show or access third-party content |
 | Age rating | 4+ (every question None / No) |
 
+## Next version
+
+The app now checks the App Store for updates, so "no internet" in the promotional text and description should become "works offline" when the next version is submitted.
+
 ## Version 1.0.0
 
 App Store Connect created the version as "1.0". It was changed to **1.0.0** so it matches the build's `CFBundleShortVersionString`; otherwise no build can be attached.
@@ -76,7 +80,7 @@ Both pages are built by GitHub Pages from `docs/` (`index.md`, `support.md`, `pr
 
 ## App Privacy
 
-**Data Not Collected.** Accurate: no network code, no SDKs, Health data read on device only. `Stride/PrivacyInfo.xcprivacy` declares no tracking and no collected data, plus UserDefaults (CA92.1).
+**Data Not Collected.** Accurate: the only network code is the App Store update check (app ID and country, no user data), no SDKs, Health data read on device only. `Stride/PrivacyInfo.xcprivacy` declares no tracking and no collected data, plus UserDefaults (CA92.1).
 
 ## Pricing and availability
 

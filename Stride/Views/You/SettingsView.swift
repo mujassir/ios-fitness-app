@@ -129,6 +129,14 @@ struct SettingsView: View {
                 Section("About") {
                     LabeledContent("App", value: "RunCheck")
                     LabeledContent("Platform", value: "iPhone")
+                    LabeledContent("Version", value: model.updates.currentVersion)
+                    if let version = model.updates.availableVersion {
+                        Button("Update to \(version)") { model.updates.openAppStore() }
+                    } else {
+                        Button("Check for Updates") {
+                            Task { await model.updates.check(force: true) }
+                        }
+                    }
                     Link("Privacy Policy", destination: URL(string: "https://mujassir.github.io/ios-fitness-app/privacy")!)
                     Link("Support", destination: URL(string: "https://mujassir.github.io/ios-fitness-app/support")!)
                     Text("Shows daily steps plus walk, jog, and run sessions from Apple Health.")

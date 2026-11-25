@@ -19,6 +19,7 @@
 		63E26021AA91BF575A30304F /* PermissionBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7995812E01FEB4963492599C /* PermissionBanner.swift */; };
 		6CD3031461808147FB0D894E /* SessionDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BF4DC072922A0B682818F2F /* SessionDetailView.swift */; };
 		80E343F367431CC16594DDAF /* StepRingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27A83A2EA32EE2496257D95B /* StepRingView.swift */; };
+		8B61366FF13D0E44CB5DABAE /* UpdateChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3240EE195046DDF779BD974 /* UpdateChecker.swift */; };
 		91DCC2859425AFB3B603A737 /* DailyStepCount.swift in Sources */ = {isa = PBXBuildFile; fileRef = 778E7FCE30F8D509E6A768F2 /* DailyStepCount.swift */; };
 		B1D749469515054F2CBD8BB9 /* HealthKitService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F733AD61B8F83C217FF32944 /* HealthKitService.swift */; };
 		DB60CA2C7DFE11AAED07DA02 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 9BB01452FD4AD5A55E0153E0 /* Assets.xcassets */; };
@@ -45,6 +46,7 @@
 		A07E086300864A0CC3537BB9 /* WorkoutStats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutStats.swift; sourceTree = "<group>"; };
 		B4E5E020E3FC147BC47B3BF2 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		BE4BBD5C5AFE5577DC86DC65 /* StatsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatsView.swift; sourceTree = "<group>"; };
+		C3240EE195046DDF779BD974 /* UpdateChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateChecker.swift; sourceTree = "<group>"; };
 		D351FCCC682D41CCE7F09668 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		F733AD61B8F83C217FF32944 /* HealthKitService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthKitService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -134,6 +136,7 @@
 			isa = PBXGroup;
 			children = (
 				F733AD61B8F83C217FF32944 /* HealthKitService.swift */,
+				C3240EE195046DDF779BD974 /* UpdateChecker.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -250,6 +253,7 @@
 				80E343F367431CC16594DDAF /* StepRingView.swift in Sources */,
 				2C12FAF78ACBCFF05263684B /* StrideApp.swift in Sources */,
 				F9BDE7DBA8F7E5E96B8D0EF0 /* Theme.swift in Sources */,
+				8B61366FF13D0E44CB5DABAE /* UpdateChecker.swift in Sources */,
 				59E19DAB15A0786D2DF0ECBB /* WorkoutStats.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

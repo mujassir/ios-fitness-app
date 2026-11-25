@@ -5,6 +5,7 @@ import Foundation
 final class AppModel {
     let health: HealthKitService
     let settings: AppSettings
+    let updates = UpdateChecker()
 
     init() {
         let settings = AppSettings()
