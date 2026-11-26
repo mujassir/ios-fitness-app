@@ -11,8 +11,8 @@ enum ActivityKind: String, Codable, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .walk: "Walk"
-        case .jog: "Jog"
-        case .run: "Run"
+        case .jog: "Jogging"
+        case .run: "Running"
         }
     }
 

@@ -4,9 +4,11 @@ title: RunCheck Privacy Policy
 
 # RunCheck Privacy Policy
 
-Last updated: November 25, 2026
+Last updated: November 26, 2026
 
 RunCheck shows your daily steps and your walk, jog, and run stats on iPhone, using data already in Apple Health. It is built so that your data stays on your iPhone. RunCheck has no accounts, no servers, no analytics, and no advertising, and it does not send any of your data to the developer or to anyone else.
+
+The only time RunCheck goes online is to check for updates: about once a day it asks Apple's App Store for the latest RunCheck version number, so it can tell you when an update is out. That request contains only RunCheck's App Store ID and your country code, never Health data, settings or anything that identifies you.
 
 ## What RunCheck uses, and why
 

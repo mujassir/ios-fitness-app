@@ -4,6 +4,8 @@ enum Palette {
     static let walk = Color("WalkColor")
     static let jog = Color("JogColor")
     static let run = Color("RunColor")
+    static let steps = Color.cyan
+    static let energy = Color.purple
     static let ringTrack = Color.primary.opacity(0.08)
 }
 
@@ -79,6 +81,24 @@ enum Formatters {
             return String(format: "%.1f km/h", kmh)
         }
         return String(format: "%.1f mph", kmh * 0.621371)
+    }
+
+    /// Speed number without its unit, for cards that show the unit once.
+    static func speedValue(_ kmh: Double?, metric: Bool) -> String {
+        guard let kmh, kmh.isFinite, kmh > 0 else { return "—" }
+        return String(format: "%.1f", metric ? kmh : kmh * 0.621371)
+    }
+
+    /// Pace (m:ss) without its unit.
+    static func paceValue(secondsPerMeter: Double?, metric: Bool) -> String {
+        let full = pace(secondsPerMeter: secondsPerMeter, metric: metric)
+        return full.replacingOccurrences(of: " " + paceUnit(metric: metric), with: "")
+    }
+
+    /// Steps per minute without its unit.
+    static func tempoValue(_ stepsPerMinute: Double?) -> String {
+        guard let stepsPerMinute, stepsPerMinute.isFinite, stepsPerMinute > 0 else { return "—" }
+        return String(format: "%.0f", stepsPerMinute)
     }
 
     static func speedUnit(metric: Bool) -> String {

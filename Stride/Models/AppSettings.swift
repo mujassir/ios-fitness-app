@@ -14,12 +14,30 @@ enum UnitSystem: String, CaseIterable, Identifiable {
     }
 }
 
+/// Light or dark look for the whole app. System follows the iPhone's setting.
+enum AppAppearance: String, CaseIterable, Identifiable {
+    case system
+    case light
+    case dark
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .system: "System"
+        case .light: "Light"
+        case .dark: "Dark"
+        }
+    }
+}
+
 @Observable
 final class AppSettings {
     private enum Keys {
         static let onboarding = "hasCompletedOnboarding"
         static let stepGoal = "dailyStepGoal"
         static let units = "unitSystem"
+        static let appearance = "appearance"
         static let weight = "weightKilograms"
         static let autoPause = "autoPause"
         static let jogMinSpeedKmh = "jogMinSpeedKmh"
@@ -30,6 +48,100 @@ final class AppSettings {
         static let walkMergeGapSeconds = "walkMergeGapSeconds"
         static let jogMergeGapSeconds = "jogMergeGapSeconds"
         static let runMergeGapSeconds = "runMergeGapSeconds"
+        static let enabledTabs = "enabledActivityTabs"
+        static let runGoalKm = "runDailyGoalKm"
+        static let jogGoalKm = "jogDailyGoalKm"
+        static let walkGoalKm = "walkDailyGoalKm"
+        static let periodGoals = "periodGoals"
+    }
+
+    var appearance: AppAppearance {
+        didSet { UserDefaults.standard.set(appearance.rawValue, forKey: Keys.appearance) }
+    }
+
+    /// Optional bottom tabs the person turned on. Running only by default.
+    var enabledTabs: Set<ActivityTab> {
+        didSet {
+            UserDefaults.standard.set(enabledTabs.map(\.rawValue).sorted(), forKey: Keys.enabledTabs)
+        }
+    }
+
+    func isTabEnabled(_ tab: ActivityTab) -> Bool {
+        enabledTabs.contains(tab)
+    }
+
+    func setTab(_ tab: ActivityTab, enabled: Bool) {
+        if enabled {
+            enabledTabs.insert(tab)
+        } else {
+            enabledTabs.remove(tab)
+        }
+    }
+
+    /// Daily distance goals, stored in kilometres.
+    var runGoalKm: Double {
+        didSet { UserDefaults.standard.set(runGoalKm, forKey: Keys.runGoalKm) }
+    }
+
+    var jogGoalKm: Double {
+        didSet { UserDefaults.standard.set(jogGoalKm, forKey: Keys.jogGoalKm) }
+    }
+
+    var walkGoalKm: Double {
+        didSet { UserDefaults.standard.set(walkGoalKm, forKey: Keys.walkGoalKm) }
+    }
+
+    /// Weekly and monthly goals, keyed "steps.weekly", "run.monthly" and so on.
+    /// Daily goals keep their own properties so existing settings carry over.
+    var periodGoals: [String: Double] {
+        didSet { UserDefaults.standard.set(periodGoals, forKey: Keys.periodGoals) }
+    }
+
+    func stepGoal(_ period: GoalPeriod) -> Int {
+        if period == .daily { return dailyStepGoal }
+        return periodGoals["steps.\(period.rawValue)"].map(Int.init) ?? period.defaultSteps
+    }
+
+    func setStepGoal(_ value: Int, for period: GoalPeriod) {
+        if period == .daily {
+            dailyStepGoal = value
+        } else {
+            periodGoals["steps.\(period.rawValue)"] = Double(value)
+        }
+    }
+
+    /// Active energy goal in kcal.
+    func energyGoal(_ period: GoalPeriod) -> Int {
+        periodGoals["energy.\(period.rawValue)"].map(Int.init) ?? period.defaultEnergy
+    }
+
+    func setEnergyGoal(_ value: Int, for period: GoalPeriod) {
+        periodGoals["energy.\(period.rawValue)"] = Double(value)
+    }
+
+    func distanceGoalKm(for kind: ActivityKind, _ period: GoalPeriod) -> Double {
+        if period == .daily { return dailyGoalKm(for: kind) }
+        return periodGoals["\(kind.rawValue).\(period.rawValue)"] ?? period.defaultDistanceKm(for: kind)
+    }
+
+    func setDistanceGoalKm(_ value: Double, for kind: ActivityKind, _ period: GoalPeriod) {
+        guard period != .daily else {
+            switch kind {
+            case .run: runGoalKm = value
+            case .jog: jogGoalKm = value
+            case .walk: walkGoalKm = value
+            }
+            return
+        }
+        periodGoals["\(kind.rawValue).\(period.rawValue)"] = value
+    }
+
+    func dailyGoalKm(for kind: ActivityKind) -> Double {
+        switch kind {
+        case .run: runGoalKm
+        case .jog: jogGoalKm
+        case .walk: walkGoalKm
+        }
     }
 
     var hasCompletedOnboarding: Bool {
@@ -114,6 +226,7 @@ final class AppSettings {
         hasCompletedOnboarding = defaults.bool(forKey: Keys.onboarding)
         dailyStepGoal = (defaults.object(forKey: Keys.stepGoal) as? Int) ?? 10_000
         unitSystem = UnitSystem(rawValue: defaults.string(forKey: Keys.units) ?? "") ?? .metric
+        appearance = AppAppearance(rawValue: defaults.string(forKey: Keys.appearance) ?? "") ?? .system
         weightKilograms = (defaults.object(forKey: Keys.weight) as? Double) ?? 70
         if defaults.object(forKey: Keys.autoPause) == nil {
             autoPause = true
@@ -128,10 +241,19 @@ final class AppSettings {
         walkMergeGapSeconds = (defaults.object(forKey: Keys.walkMergeGapSeconds) as? Double) ?? 120
         jogMergeGapSeconds = (defaults.object(forKey: Keys.jogMergeGapSeconds) as? Double) ?? 30
         runMergeGapSeconds = (defaults.object(forKey: Keys.runMergeGapSeconds) as? Double) ?? 10
+        if let saved = defaults.stringArray(forKey: Keys.enabledTabs) {
+            enabledTabs = Set(saved.compactMap(ActivityTab.init(rawValue:)))
+        } else {
+            enabledTabs = ActivityTab.defaultEnabled
+        }
+        runGoalKm = (defaults.object(forKey: Keys.runGoalKm) as? Double) ?? 3
+        jogGoalKm = (defaults.object(forKey: Keys.jogGoalKm) as? Double) ?? 2
+        walkGoalKm = (defaults.object(forKey: Keys.walkGoalKm) as? Double) ?? 3
+        periodGoals = (defaults.dictionary(forKey: Keys.periodGoals) as? [String: Double]) ?? [:]
     }
 }
 
-struct ActivityDetectionSettings: Equatable {
+struct ActivityDetectionSettings: Hashable, Sendable {
     var jogMinSpeedKmh: Double
     var runMinSpeedKmh: Double
     var walkMinSessionMinutes: Double

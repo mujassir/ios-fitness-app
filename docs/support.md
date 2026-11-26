@@ -18,7 +18,7 @@ From Apple Health: your iPhone's step counting, an Apple Watch, or any app that 
 By your average speed. You can change the jog and run speed thresholds in the **You** tab.
 
 **Does RunCheck need an account or internet?**
-No. Everything stays on your iPhone. See the [Privacy Policy](privacy).
+No account. RunCheck works offline. When online, it checks the App Store about once a day for a newer version and lets you know. Your Health data stays on your iPhone. See the [Privacy Policy](privacy).
 
 ## Contact
 

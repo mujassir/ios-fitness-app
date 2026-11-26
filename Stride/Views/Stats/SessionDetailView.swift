@@ -12,24 +12,26 @@ struct SessionDetailView: View {
                 header
                 summaryGrid
                 rangeCard(title: "Speed", unit: Formatters.speedUnit(metric: metric)) {
-                    (Formatters.speed(session.averageSpeedKmh, metric: metric),
-                     Formatters.speed(session.minSpeedKmh, metric: metric),
-                     Formatters.speed(session.maxSpeedKmh, metric: metric))
+                    (Formatters.speedValue(session.averageSpeedKmh, metric: metric),
+                     Formatters.speedValue(session.minSpeedKmh, metric: metric),
+                     Formatters.speedValue(session.maxSpeedKmh, metric: metric))
                 }
-                rangeCard(title: "Pace", unit: Formatters.paceUnit(metric: metric)) {
-                    (Formatters.pace(secondsPerMeter: session.averagePaceSecondsPerMeter, metric: metric),
-                     Formatters.pace(secondsPerMeter: session.minPaceSecondsPerMeter, metric: metric),
-                     Formatters.pace(secondsPerMeter: session.maxPaceSecondsPerMeter, metric: metric))
+                rangeCard(title: "Pace", unit: metric ? "min/km" : "min/mi") {
+                    (Formatters.paceValue(secondsPerMeter: session.averagePaceSecondsPerMeter, metric: metric),
+                     Formatters.paceValue(secondsPerMeter: session.minPaceSecondsPerMeter, metric: metric),
+                     Formatters.paceValue(secondsPerMeter: session.maxPaceSecondsPerMeter, metric: metric))
                 }
                 rangeCard(title: "Tempo", unit: "spm") {
-                    (Formatters.tempo(session.averageTempo),
-                     Formatters.tempo(session.minTempo),
-                     Formatters.tempo(session.maxTempo))
+                    (Formatters.tempoValue(session.averageTempo),
+                     Formatters.tempoValue(session.minTempo),
+                     Formatters.tempoValue(session.maxTempo))
                 }
                 chartCard
+                splitsCard
             }
             .padding(20)
         }
+        .clearsTabBar()
         .background(Color(.systemGroupedBackground))
         .navigationTitle(session.kind.title)
         .navigationBarTitleDisplayMode(.inline)
@@ -67,10 +69,10 @@ struct SessionDetailView: View {
                 symbol: "point.bottomleft.forward.to.point.topright.scurvepath"
             )
             MetricTile(
-                title: "Steps",
-                value: Formatters.steps(session.steps),
-                unit: "steps",
-                symbol: "shoeprints.fill"
+                title: "Avg speed",
+                value: Formatters.speedValue(session.averageSpeedKmh, metric: metric),
+                unit: Formatters.speedUnit(metric: metric),
+                symbol: "gauge.with.needle"
             )
             MetricTile(
                 title: "Energy",
@@ -79,10 +81,10 @@ struct SessionDetailView: View {
                 symbol: "flame.fill"
             )
             MetricTile(
-                title: "Avg pace",
-                value: Formatters.pace(secondsPerMeter: session.averagePaceSecondsPerMeter, metric: metric),
-                unit: "",
-                symbol: "gauge.with.needle"
+                title: "Steps",
+                value: Formatters.steps(session.steps),
+                unit: "steps",
+                symbol: "shoeprints.fill"
             )
         }
     }
@@ -165,6 +167,67 @@ struct SessionDetailView: View {
         }
         .padding(16)
         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+    }
+
+    private var unitMeters: Double { metric ? 1000 : 1609.344 }
+
+    @ViewBuilder
+    private var splitsCard: some View {
+        let splits = session.splits(unitMeters: unitMeters)
+        if !splits.isEmpty {
+            let fastest = splits.filter { !$0.isPartial }.map(\.speedKmh).max() ?? 0
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Text(metric ? "Each km" : "Each mile")
+                        .font(.headline)
+                    Spacer()
+                    Text(Formatters.speedUnit(metric: metric))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+
+                HStack {
+                    Text(metric ? "KM" : "MI")
+                        .frame(width: 56, alignment: .leading)
+                    Text("TIME")
+                    Spacer()
+                    Text("SPEED")
+                }
+                .font(.caption2.weight(.semibold))
+                .tracking(0.5)
+                .foregroundStyle(.secondary)
+
+                ForEach(splits) { split in
+                    HStack(spacing: 12) {
+                        Text(splitLabel(split))
+                            .font(.subheadline.weight(.semibold).monospacedDigit())
+                            .frame(width: 56, alignment: .leading)
+                        Text(Formatters.duration(split.duration))
+                            .font(.subheadline.monospacedDigit())
+                            .frame(width: 64, alignment: .leading)
+                        GeometryReader { proxy in
+                            Capsule()
+                                .fill(session.kind.color.opacity(split.speedKmh >= fastest && !split.isPartial ? 1 : 0.5))
+                                .frame(width: max(4, proxy.size.width * split.speedKmh / max(fastest, split.speedKmh, 0.1)))
+                        }
+                        .frame(height: 8)
+                        Text(Formatters.speedValue(split.speedKmh, metric: metric))
+                            .font(.subheadline.weight(.semibold).monospacedDigit())
+                            .frame(width: 44, alignment: .trailing)
+                    }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("\(splitLabel(split)): \(Formatters.duration(split.duration)), \(Formatters.speed(split.speedKmh, metric: metric))")
+                }
+            }
+            .padding(16)
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        }
+    }
+
+    /// "1", "2"… for full splits; the last partial one shows its distance, like "0.75".
+    private func splitLabel(_ split: SessionSplit) -> String {
+        guard split.isPartial else { return "\(split.index)" }
+        return String(format: "%.2f", split.distanceMeters / unitMeters)
     }
 
     private func chartValue(_ sample: SessionSample) -> Double {

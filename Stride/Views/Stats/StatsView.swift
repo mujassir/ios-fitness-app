@@ -2,11 +2,43 @@ import SwiftUI
 
 struct StatsView: View {
     @Environment(AppModel.self) private var model
-    @State private var period: StatsPeriod = .today
-    @State private var selectedDay = Calendar.current.startOfDay(for: .now)
-    @State private var weekOffset = 0
+    var focus: StatsFocus = .summary
+
+    // Period and date live in AppModel so every tab shows the same Daily /
+    // Week / Month choice and the same selected day or week.
+    private var selection: StatsSelection { model.selection }
+    @State private var scrollPosition = ScrollPosition(edge: .top)
+    /// False until this page has scrolled to the shared position, so its
+    /// starting offset of 0 doesn't overwrite the saved one.
+    @State private var restoredScroll = false
+
+    private var period: StatsPeriod {
+        get { selection.period }
+        nonmutating set { selection.period = newValue }
+    }
+
+    private var selectedDay: Date {
+        get { selection.selectedDay }
+        nonmutating set { selection.selectedDay = newValue }
+    }
+
+    private var weekOffset: Int {
+        get { selection.weekOffset }
+        nonmutating set { selection.weekOffset = newValue }
+    }
+
+    private var monthOffset: Int {
+        get { selection.monthOffset }
+        nonmutating set { selection.monthOffset = newValue }
+    }
+
+    private var selectedWeekStart: Date {
+        get { selection.selectedWeekStart }
+        nonmutating set { selection.selectedWeekStart = newValue }
+    }
 
     private let pastWeekLimit = 52
+    private let pastMonthLimit = 12
     private var calendar: Calendar { StatsPeriod.sundayCalendar }
 
     private var displayedWeekStart: Date {
@@ -17,17 +49,23 @@ struct StatsView: View {
         StatsPeriod.daysInWeek(containing: displayedWeekStart)
     }
 
+    private var selectedWeekEnd: Date {
+        calendar.date(byAdding: .weekOfYear, value: 1, to: selectedWeekStart)
+            ?? selectedWeekStart.addingTimeInterval(7 * 24 * 3600)
+    }
+
     private var breakdown: ActivityStatsBreakdown {
         switch period {
-        case .today:
+        case .daily:
             model.health.stats(
-                on: calendar.startOfDay(for: .now),
+                on: selectedDay,
                 detection: model.settings.detection,
                 weightKilograms: model.settings.weightKilograms
             )
         case .week:
-            model.health.stats(
-                on: selectedDay,
+            model.health.rangeStats(
+                from: selectedWeekStart,
+                to: selectedWeekEnd,
                 detection: model.settings.detection,
                 weightKilograms: model.settings.weightKilograms
             )
@@ -43,39 +81,89 @@ struct StatsView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 20) {
-                    Picker("Period", selection: $period) {
-                        ForEach(StatsPeriod.allCases) { item in
-                            Text(item.title).tag(item)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .onChange(of: period) { _, newValue in
-                        if newValue == .today {
-                            selectedDay = calendar.startOfDay(for: .now)
-                        }
-                    }
+                    ScreenTitle(focus.title)
 
-                    if period == .week {
+                    CapsuleSegmentedPicker(
+                        items: StatsPeriod.allCases,
+                        selection: Bindable(selection).period,
+                        title: \.title
+                    )
+                    .accessibilityLabel("Period")
+
+                    switch period {
+                    case .daily:
                         weekdayPager
+                    case .week:
+                        monthWeekPager
+                    case .month:
+                        EmptyView()
                     }
 
-                    if period == .month {
-                        monthWeekList
+                    if !isReady {
+                        PeriodLoadingCard(period: period)
                     } else {
-                        StatsBreakdownStack(
-                            breakdown: breakdown,
-                            caption: caption,
-                            showHero: true,
-                            isMonth: false
+                        switch period {
+                    case .daily:
+                        content(
+                            caption: selectedDay.formatted(.dateTime.weekday(.wide).month(.wide).day()),
+                            totalsTitle: "Activity",
+                            days: [selectedDay]
                         )
+                    case .week:
+                        content(
+                            caption: selectedWeekCaption,
+                            totalsTitle: selectedWeekStart == StatsPeriod.startOfWeek(containing: .now)
+                                ? "This week" : "Week",
+                            days: StatsPeriod.daysInWeek(containing: selectedWeekStart)
+                                .filter { !StatsPeriod.isFutureDay($0) }
+                        )
+                    case .month:
+                        if focus == .summary {
+                            monthWeekList
+                        } else {
+                            content(
+                                caption: Date.now.formatted(.dateTime.month(.wide).year()),
+                                totalsTitle: "This month",
+                                days: daysThisMonth
+                            )
+                        }
+                    }
                     }
                 }
-                .padding(20)
+                .padding(.horizontal, 20)
+                .padding(.bottom, 20)
+                .padding(.top, 8)
+            }
+            .clearsTabBar()
+            .scrollPosition($scrollPosition)
+            .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                geometry.contentOffset.y + geometry.contentInsets.top
+            } action: { _, offset in
+                guard restoredScroll else { return }
+                selection.scrollOffset = max(0, offset)
+            }
+            .task {
+                // Open where the last stats tab was scrolled to, once the
+                // page has laid out its content.
+                let target = selection.scrollOffset
+                if target > 0 {
+                    await Task.yield()
+                    scrollPosition.scrollTo(y: target)
+                    try? await Task.sleep(for: .milliseconds(50))
+                }
+                restoredScroll = true
             }
             .background(Color(.systemGroupedBackground))
-            .navigationTitle("Stats")
-            .navigationBarTitleDisplayMode(.large)
+            .navigationTitle(focus.title)
+            .toolbar(.hidden, for: .navigationBar)
             .refreshable { await model.refresh() }
+            .task(id: prepareID) {
+                await model.health.prepare(
+                    neededRanges,
+                    detection: model.settings.detection,
+                    weightKilograms: model.settings.weightKilograms
+                )
+            }
             .overlay {
                 if model.health.isLoadingStats && model.health.dailyMetrics.isEmpty {
                     ProgressView("Reading Health…")
@@ -86,15 +174,121 @@ struct StatsView: View {
         }
     }
 
-    private var caption: String {
+    /// Date ranges the current view needs worked out before it can draw.
+    private var neededRanges: [HealthKitService.DateRange] {
+        let base: [HealthKitService.DateRange]
         switch period {
-        case .today:
-            calendar.startOfDay(for: .now).formatted(.dateTime.weekday(.wide).month(.wide).day())
+        case .daily:
+            base = [HealthKitService.dayRange(selectedDay)]
         case .week:
-            selectedDay.formatted(.dateTime.weekday(.wide).month(.wide).day())
+            base = [HealthKitService.weekRange(selectedWeekStart)]
         case .month:
-            Date.now.formatted(.dateTime.month(.wide).year())
+            base = focus == .summary ? HealthKitService.monthRanges() : [HealthKitService.monthRange()]
         }
+        // Running, Jogging and Walk list each day in Week and Month; Summary
+        // does in Week.
+        let listsDays: Bool
+        switch focus {
+        case .kind: listsDays = period != .daily
+        case .summary: listsDays = period == .week
+        default: listsDays = false
+        }
+        guard listsDays else { return base }
+        return base + periodDays.map(HealthKitService.dayRange)
+    }
+
+    private var periodDays: [Date] {
+        switch period {
+        case .daily: [selectedDay]
+        case .week: StatsPeriod.daysInWeek(containing: selectedWeekStart).filter { !StatsPeriod.isFutureDay($0) }
+        case .month: daysThisMonth
+        }
+    }
+
+    private var isReady: Bool {
+        model.health.isPrepared(
+            neededRanges,
+            detection: model.settings.detection,
+            weightKilograms: model.settings.weightKilograms
+        )
+    }
+
+    private struct PrepareID: Hashable {
+        let period: StatsPeriod
+        let day: Date
+        let week: Date
+        let detection: ActivityDetectionSettings
+        let weight: Double
+        let version: Int
+    }
+
+    private var prepareID: PrepareID {
+        PrepareID(
+            period: period,
+            day: selectedDay,
+            week: selectedWeekStart,
+            detection: model.settings.detection,
+            weight: model.settings.weightKilograms,
+            version: model.health.preparedVersion
+        )
+    }
+
+    /// The screen body for this tab's focus. `days` are the days in the
+    /// period (up to today). Goals come from the period's own goal.
+    @ViewBuilder
+    private func content(caption: String, totalsTitle: String, days: [Date]) -> some View {
+        switch focus {
+        case .summary:
+            StatsBreakdownStack(
+                breakdown: breakdown,
+                caption: caption,
+                showHero: period == .daily,
+                isMonth: period != .daily,
+                goalPeriod: GoalPeriod(period),
+                totalsTitle: totalsTitle,
+                days: days
+            )
+        case .kind(let kind):
+            KindFocusStack(
+                kind: kind,
+                breakdown: breakdown,
+                caption: caption,
+                goalPeriod: GoalPeriod(period),
+                days: days
+            )
+        case .energy:
+            EnergyFocusStack(
+                breakdown: breakdown,
+                caption: caption,
+                days: days,
+                goalPeriod: GoalPeriod(period)
+            )
+        case .steps:
+            StepsFocusStack(
+                breakdown: breakdown,
+                caption: caption,
+                days: days,
+                goalPeriod: GoalPeriod(period)
+            )
+        }
+    }
+
+    private var daysThisMonth: [Date] {
+        let cal = Calendar.current
+        guard let month = cal.dateInterval(of: .month, for: .now) else { return [] }
+        var days: [Date] = []
+        var day = month.start
+        while day < month.end, !StatsPeriod.isFutureDay(day) {
+            days.append(day)
+            day = cal.date(byAdding: .day, value: 1, to: day) ?? month.end
+        }
+        return days
+    }
+
+    private var selectedWeekCaption: String {
+        let format = Date.FormatStyle().month(.abbreviated).day()
+        let last = calendar.date(byAdding: .day, value: 6, to: selectedWeekStart) ?? selectedWeekStart
+        return "\(selectedWeekStart.formatted(format)) – \(last.formatted(format))"
     }
 
     private var monthWeekList: some View {
@@ -108,6 +302,10 @@ struct StatsView: View {
             Text(Date.now.formatted(.dateTime.month(.wide).year()))
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(.secondary)
+
+            HealthAccessBanner(isEmpty: breakdown.isEmpty)
+
+            SummaryRings(breakdown: breakdown, goalPeriod: .monthly)
 
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                 MetricTile(
@@ -147,19 +345,15 @@ struct StatsView: View {
         }
     }
 
+    /// From a Month tile: show that week in the Week tab.
     private func open(week start: Date) {
-        let current = StatsPeriod.startOfWeek(containing: .now)
-        let days = calendar.dateComponents([.day], from: start, to: current).day ?? 0
-        weekOffset = max(-pastWeekLimit, min(0, -(days / 7)))
+        monthOffset = 0
+        selectedWeekStart = start
         period = .week
-        alignSelectedDayToWeek()
-        Task {
-            await model.health.ensureCoverage(
-                of: start,
-                weightKilograms: model.settings.weightKilograms
-            )
-        }
+        ensureCoverage(of: start)
     }
+
+    // MARK: - Daily: day strip, swipe for weeks
 
     private var weekRangeCaption: String {
         guard let first = weekdayDates.first, let last = weekdayDates.last else { return "This week" }
@@ -176,11 +370,12 @@ struct StatsView: View {
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
 
-            TabView(selection: $weekOffset) {
+            TabView(selection: Bindable(selection).weekOffset) {
                 ForEach(-pastWeekLimit...0, id: \.self) { offset in
                     WeekDayStrip(
+                        tint: focus.color,
                         dates: StatsPeriod.daysInWeek(containing: weekStart(for: offset)),
-                        selectedDay: $selectedDay
+                        selectedDay: Bindable(selection).selectedDay
                     )
                     .tag(offset)
                 }
@@ -189,12 +384,7 @@ struct StatsView: View {
             .frame(height: 64)
             .onChange(of: weekOffset) { _, _ in
                 alignSelectedDayToWeek()
-                Task {
-                    await model.health.ensureCoverage(
-                        of: displayedWeekStart,
-                        weightKilograms: model.settings.weightKilograms
-                    )
-                }
+                ensureCoverage(of: displayedWeekStart)
             }
         }
         .accessibilityHint("Swipe left or right to change week")
@@ -218,9 +408,113 @@ struct StatsView: View {
         }
         selectedDay = days.last { !StatsPeriod.isFutureDay($0) } ?? calendar.startOfDay(for: .now)
     }
+
+    // MARK: - Week: week chips for a month, swipe for months
+
+    private func monthStart(for offset: Int) -> Date {
+        let current = Calendar.current.dateInterval(of: .month, for: .now)?.start ?? .now
+        return Calendar.current.date(byAdding: .month, value: offset, to: current) ?? current
+    }
+
+    private var monthCaption: String {
+        monthOffset == 0
+            ? "This month"
+            : monthStart(for: monthOffset).formatted(.dateTime.month(.wide).year())
+    }
+
+    private var monthWeekPager: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(monthCaption)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            TabView(selection: Bindable(selection).monthOffset) {
+                ForEach(-pastMonthLimit...0, id: \.self) { offset in
+                    MonthWeekStrip(
+                        tint: focus.color,
+                        weekStarts: StatsPeriod.weekStarts(inMonthOf: monthStart(for: offset)),
+                        selectedWeekStart: Bindable(selection).selectedWeekStart
+                    )
+                    .tag(offset)
+                }
+            }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+            .frame(height: 64)
+            .onChange(of: monthOffset) { _, _ in
+                alignSelectedWeekToMonth()
+            }
+            .onChange(of: selectedWeekStart) { _, start in
+                ensureCoverage(of: start)
+            }
+        }
+        .accessibilityHint("Swipe left or right to change month")
+    }
+
+    /// Keeps the same week number when swiping months, or the last week
+    /// available (the current week for this month).
+    private func alignSelectedWeekToMonth() {
+        let weeks = StatsPeriod.weekStarts(inMonthOf: monthStart(for: monthOffset))
+        guard !weeks.contains(selectedWeekStart), let last = weeks.last else { return }
+        let previous = monthOffset < 0 ? StatsPeriod.weekStarts(inMonthOf: monthStart(for: monthOffset + 1)) : []
+        if let index = previous.firstIndex(of: selectedWeekStart), index < weeks.count {
+            selectedWeekStart = weeks[index]
+        } else {
+            selectedWeekStart = last
+        }
+    }
+
+    private func ensureCoverage(of date: Date) {
+        Task {
+            await model.health.ensureCoverage(
+                of: date,
+                weightKilograms: model.settings.weightKilograms
+            )
+        }
+    }
+}
+
+private struct MonthWeekStrip: View {
+    let tint: Color
+    let weekStarts: [Date]
+    @Binding var selectedWeekStart: Date
+
+    private var calendar: Calendar { StatsPeriod.sundayCalendar }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ForEach(Array(weekStarts.enumerated()), id: \.element) { index, start in
+                let end = calendar.date(byAdding: .day, value: 6, to: start) ?? start
+                let isSelected = start == selectedWeekStart
+                Button {
+                    selectedWeekStart = start
+                } label: {
+                    VStack(spacing: 4) {
+                        Text("Week \(index + 1)")
+                            .font(.caption.weight(.semibold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                        Text("\(start.formatted(.dateTime.day()))–\(end.formatted(.dateTime.day()))")
+                            .font(.subheadline.weight(.bold).monospacedDigit())
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .foregroundStyle(isSelected ? Color.white : Color.primary)
+                    .background(
+                        isSelected ? tint : Color.primary.opacity(0.06),
+                        in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(
+                    "Week of \(start.formatted(.dateTime.month(.wide).day()))"
+                )
+            }
+        }
+    }
 }
 
 private struct WeekDayStrip: View {
+    let tint: Color
     let dates: [Date]
     @Binding var selectedDay: Date
 
@@ -249,7 +543,7 @@ private struct WeekDayStrip: View {
                     )
                     .background(
                         isSelected
-                            ? Color.accentColor
+                            ? tint
                             : Color.primary.opacity(isFuture ? 0 : 0.06),
                         in: RoundedRectangle(cornerRadius: 14, style: .continuous)
                     )
@@ -341,22 +635,60 @@ private struct MonthWeekTile: View {
     }
 }
 
+/// Shown at the top of every stats tab when Health can't be read.
+struct HealthAccessBanner: View {
+    @Environment(AppModel.self) private var model
+    let isEmpty: Bool
+
+    var body: some View {
+        if !model.health.isAvailable {
+            PermissionBanner(
+                title: "Apple Health unavailable",
+                detail: "Walk, jog, and run stats are read from Health on this iPhone."
+            )
+        } else if model.health.accessLikelyMissing {
+            PermissionBanner(
+                title: "No Health data",
+                detail: "RunCheck can't read any steps or workouts. In Health, tap your profile, then Apps → RunCheck, and turn on all categories.",
+                actionTitle: "Open Health"
+            ) {
+                model.health.openHealthApp()
+            }
+        } else if isEmpty && model.health.todaySteps == 0 && !model.health.isAuthorized {
+            PermissionBanner(
+                title: "Connect Apple Health",
+                detail: model.health.lastError
+                    ?? "Allow Steps, Distance, Energy, and Workouts so Stats can fill in.",
+                isWorking: model.health.isRequesting
+            ) {
+                Task {
+                    await model.health.requestAuthorization()
+                    await model.refresh()
+                }
+            }
+        }
+    }
+}
+
 private struct StatsBreakdownStack: View {
     @Environment(AppModel.self) private var model
     let breakdown: ActivityStatsBreakdown
     let caption: String
     let showHero: Bool
     let isMonth: Bool
+    var goalPeriod: GoalPeriod = .daily
+    var totalsTitle: String = "Activity"
+    /// Days of the week so far, for the Week view's By each day list.
+    var days: [Date] = []
 
     private var kindsWithData: [ActivityKind] {
         ActivityKind.allCases.filter { kind in
-            (breakdown.byKind[kind] ?? ActivityKindStats()).hasData
+            // A card only shows with at least one real session; a few minutes
+            // of movement during the day don't earn one.
+            (breakdown.byKind[kind] ?? ActivityKindStats()).count > 0
         }
     }
 
-    private var hasRunSession: Bool {
-        breakdown.sessions.contains { $0.kind == .run }
-    }
 
     var body: some View {
         VStack(spacing: 20) {
@@ -365,45 +697,43 @@ private struct StatsBreakdownStack: View {
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            if !model.health.isAvailable {
-                PermissionBanner(
-                    title: "Apple Health unavailable",
-                    detail: "Walk, jog, and run stats are read from Health on this iPhone."
-                )
-            } else if breakdown.isEmpty && model.health.todaySteps == 0 && !model.health.isAuthorized {
-                PermissionBanner(
-                    title: "Connect Apple Health",
-                    detail: model.health.lastError
-                        ?? "Allow Steps, Distance, Energy, and Workouts so Stats can fill in.",
-                    isWorking: model.health.isRequesting
-                ) {
-                    Task {
-                        await model.health.requestAuthorization()
-                        await model.refresh()
-                    }
-                }
-            }
+            HealthAccessBanner(isEmpty: breakdown.isEmpty)
 
             if showHero {
                 dayHero
+            } else {
+                SummaryRings(breakdown: breakdown, goalPeriod: goalPeriod)
             }
 
             totalsCard
 
-            if hasRunSession {
-                recentList
-            }
-
             ForEach(kindsWithData) { kind in
-                KindStatsCard(
-                    kind: kind,
-                    stats: breakdown.byKind[kind] ?? ActivityKindStats(),
-                    metric: model.settings.usesMetric
-                )
+                let sessions = breakdown.sessions.filter { $0.kind == kind }.sorted { $0.start > $1.start }
+                NavigationLink {
+                    // One session opens straight to its details; more open the list.
+                    if sessions.count == 1, let only = sessions.first {
+                        SessionDetailView(session: only, metric: model.settings.usesMetric)
+                    } else {
+                        KindSessionsView(
+                            kind: kind,
+                            caption: caption,
+                            sessions: sessions,
+                            metric: model.settings.usesMetric
+                        )
+                    }
+                } label: {
+                    KindStatsCard(
+                        kind: kind,
+                        stats: breakdown.byKind[kind] ?? ActivityKindStats(),
+                        metric: model.settings.usesMetric
+                    )
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
             }
 
-            if !hasRunSession {
-                recentList
+            if goalPeriod == .weekly && days.count > 1 {
+                DailyRingsList(days: days)
             }
 
             Text(paceFootnote)
@@ -423,9 +753,7 @@ private struct StatsBreakdownStack: View {
 
     private var dayHero: some View {
         VStack(spacing: 16) {
-            StepRingView(steps: breakdown.day.steps, goal: model.settings.dailyStepGoal)
-                .frame(maxWidth: 280)
-                .frame(maxWidth: .infinity)
+            SummaryRings(breakdown: breakdown, goalPeriod: .daily)
 
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                 MetricTile(
@@ -447,7 +775,7 @@ private struct StatsBreakdownStack: View {
     private var totalsCard: some View {
         let totals = breakdown.totals
         return VStack(alignment: .leading, spacing: 14) {
-            Text(isMonth ? "This month" : "Activity")
+            Text(totalsTitle)
                 .font(.headline)
 
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
@@ -483,37 +811,6 @@ private struct StatsBreakdownStack: View {
         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
     }
 
-    private var recentList: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Sessions")
-                    .font(.headline)
-                Spacer()
-                Text("\(breakdown.sessions.count)")
-                    .font(.subheadline.weight(.semibold).monospacedDigit())
-                    .foregroundStyle(.secondary)
-            }
-
-            if breakdown.sessions.isEmpty {
-                Text(breakdown.day.hasActivity
-                     ? "No disciplined walk, jog, or run to list. Moving around at home or in the office stays in the tiles, not as a session."
-                     : "Nothing recorded in Apple Health for this period.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(breakdown.sessions) { session in
-                    NavigationLink {
-                        SessionDetailView(session: session, metric: model.settings.usesMetric)
-                    } label: {
-                        HealthSessionRow(session: session, metric: model.settings.usesMetric)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-        .padding(16)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-    }
 }
 
 private struct KindStatsCard: View {
@@ -533,19 +830,24 @@ private struct KindStatsCard: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(kind.title)
                         .font(.headline)
-                    Text(subtitle)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                    if stats.count > 1 {
+                        Text("\(stats.count) sessions")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 Spacer()
                 Text(Formatters.distance(stats.distanceMeters, metric: metric))
                     .font(.title3.weight(.bold).monospacedDigit())
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
             }
 
             HStack {
                 labeledValue("Time", Formatters.duration(stats.duration))
                 Spacer()
-                labeledValue("Pace", Formatters.pace(secondsPerMeter: stats.averagePaceSecondsPerMeter, metric: metric))
+                labeledValue("Speed", Formatters.speed(averageSpeedKmh, metric: metric))
                 Spacer()
                 labeledValue("Energy", "\(Formatters.calories(stats.calories)) kcal")
             }
@@ -555,12 +857,9 @@ private struct KindStatsCard: View {
         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
     }
 
-    private var subtitle: String {
-        let sessionText = stats.count == 1 ? "1 session" : "\(stats.count) sessions"
-        if stats.steps > 0 {
-            return "\(sessionText) · \(Formatters.steps(stats.steps)) steps"
-        }
-        return sessionText
+    private var averageSpeedKmh: Double? {
+        guard stats.duration > 0, stats.distanceMeters > 1 else { return nil }
+        return stats.distanceMeters / stats.duration * 3.6
     }
 
     private func labeledValue(_ title: String, _ value: String) -> some View {
@@ -575,7 +874,7 @@ private struct KindStatsCard: View {
     }
 }
 
-private struct HealthSessionRow: View {
+struct HealthSessionRow: View {
     let session: HealthActivitySession
     let metric: Bool
 
@@ -588,7 +887,9 @@ private struct HealthSessionRow: View {
                 .background(session.kind.color.opacity(0.15), in: Circle())
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(session.kind.title)
+                // Lists show one kind at a time, so the date says more than
+                // repeating "Running" on every row.
+                Text(session.start.formatted(.dateTime.day().month(.abbreviated)))
                     .font(.headline)
                 Text(session.start.formatted(date: .omitted, time: .shortened))
                     .font(.caption)
@@ -609,5 +910,76 @@ private struct HealthSessionRow: View {
                 .foregroundStyle(.tertiary)
         }
         .padding(.vertical, 4)
+    }
+}
+
+/// Shown while a period's stats are worked out. It waits a moment before
+/// appearing so quick loads don't flash a spinner.
+private struct PeriodLoadingCard: View {
+    let period: StatsPeriod
+    @State private var visible = false
+
+    var body: some View {
+        HStack(spacing: 12) {
+            ProgressView()
+            Text(message)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Spacer()
+        }
+        .padding(16)
+        .frame(minHeight: 120)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .opacity(visible ? 1 : 0)
+        .task {
+            try? await Task.sleep(for: .milliseconds(150))
+            withAnimation(.easeIn(duration: 0.15)) { visible = true }
+        }
+    }
+
+    private var message: String {
+        switch period {
+        case .daily: "Loading this day…"
+        case .week: "Loading this week…"
+        case .month: "Loading this month…"
+        }
+    }
+}
+
+/// Opened from a Summary card: that kind's sessions for the selected period.
+private struct KindSessionsView: View {
+    let kind: ActivityKind
+    let caption: String
+    let sessions: [HealthActivitySession]
+    let metric: Bool
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                Text(caption)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.secondary)
+
+                VStack(alignment: .leading, spacing: 12) {
+                    ForEach(sessions) { session in
+                        NavigationLink {
+                            SessionDetailView(session: session, metric: metric)
+                        } label: {
+                            HealthSessionRow(session: session, metric: metric)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(16)
+                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 8)
+        }
+        .clearsTabBar()
+        .background(Color(.systemGroupedBackground))
+        .navigationTitle(sessions.count == 1 ? "1 \(kind.title.lowercased()) session" : "\(sessions.count) \(kind.title.lowercased()) sessions")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
     }
 }
