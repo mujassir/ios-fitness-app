@@ -2,28 +2,105 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(AppModel.self) private var model
+    @State private var goalPeriod: GoalPeriod = .daily
 
     var body: some View {
         NavigationStack {
             Form {
-                Section("Daily goal") {
-                    Stepper(value: Bindable(model.settings).dailyStepGoal, in: 1_000...40_000, step: 500) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Step goal")
-                            Text(Formatters.steps(model.settings.dailyStepGoal))
-                                .font(.title3.bold().monospacedDigit())
-                                .foregroundStyle(Color.accentColor)
+                Section {
+                } header: {
+                    ScreenTitle("You")
+                        .textCase(nil)
+                        .padding(.leading, -20)
+                }
+                Section {
+                    ForEach(ActivityTab.allCases) { tab in
+                        Toggle(isOn: Binding(
+                            get: { model.settings.isTabEnabled(tab) },
+                            set: { model.settings.setTab(tab, enabled: $0) }
+                        )) {
+                            Label {
+                                Text(tab.title)
+                            } icon: {
+                                Image(systemName: tab.symbol)
+                                    .foregroundStyle(tab.color)
+                            }
                         }
                     }
+                } header: {
+                    Text("Tabs")
+                } footer: {
+                    Text("Summary and You are always shown. When the tabs don't all fit, swipe the tab bar to see the rest.")
+                }
+
+                Section {
+                    CapsuleSegmentedPicker(
+                        items: GoalPeriod.allCases,
+                        selection: $goalPeriod,
+                        title: \.title
+                    )
+                    .listRowInsets(EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8))
+                    .accessibilityLabel("Goal period")
+
+                    if showsStepGoal {
+                        Stepper(
+                            value: stepGoalBinding,
+                            in: goalPeriod.stepRange,
+                            step: goalPeriod.stepIncrement
+                        ) {
+                            goalLabel("Steps", Formatters.steps(model.settings.stepGoal(goalPeriod)), color: SummaryRings.stepsColor)
+                        }
+                    }
+                    ForEach(enabledGoalKinds) { kind in
+                        Stepper(
+                            value: distanceGoalBinding(kind),
+                            in: goalPeriod.distanceRangeKm,
+                            step: goalPeriod.distanceIncrementKm
+                        ) {
+                            goalLabel(
+                                goalTitle(kind),
+                                goalDistance(model.settings.distanceGoalKm(for: kind, goalPeriod)),
+                                color: kind.color
+                            )
+                        }
+                    }
+                    if model.settings.isTabEnabled(.energy) {
+                        Stepper(
+                            value: energyGoalBinding,
+                            in: goalPeriod.energyRange,
+                            step: goalPeriod.energyIncrement
+                        ) {
+                            goalLabel(
+                                "Energy",
+                                "\(Formatters.steps(model.settings.energyGoal(goalPeriod))) kcal",
+                                color: SummaryRings.energyColor
+                            )
+                        }
+                    }
+                } header: {
+                    Text("Goals")
+                } footer: {
+                    Text("Goals are shown for the tabs turned on above. Daily goals fill the rings in Daily view, weekly goals in Week view, and monthly goals in Month view.")
+                }
+
+                Section("Appearance") {
+                    CapsuleSegmentedPicker(
+                        items: AppAppearance.allCases,
+                        selection: Bindable(model.settings).appearance,
+                        title: \.title
+                    )
+                    .listRowInsets(EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8))
+                    .accessibilityLabel("Appearance")
                 }
 
                 Section("Units") {
-                    Picker("Distance", selection: Bindable(model.settings).unitSystem) {
-                        ForEach(UnitSystem.allCases) { system in
-                            Text(system.title).tag(system)
-                        }
-                    }
-                    .pickerStyle(.segmented)
+                    CapsuleSegmentedPicker(
+                        items: UnitSystem.allCases,
+                        selection: Bindable(model.settings).unitSystem,
+                        title: \.title
+                    )
+                    .listRowInsets(EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8))
+                    .accessibilityLabel("Distance units")
 
                     Stepper(value: Bindable(model.settings).weightKilograms, in: 30...200, step: 1) {
                         VStack(alignment: .leading, spacing: 4) {
@@ -137,7 +214,7 @@ struct SettingsView: View {
                             Task { await model.updates.check(force: true) }
                         }
                     }
-                    Link("Privacy Policy", destination: URL(string: "https://mujassir.github.io/ios-fitness-app/privacy")!)
+                    Link("Privacy Policy", destination: URL(string: "https://mujassir.com/runcheck/privacy/")!)
                     Link("Support", destination: URL(string: "https://mujassir.github.io/ios-fitness-app/support")!)
                     Text("Shows daily steps plus walk, jog, and run sessions from Apple Health.")
                         .font(.footnote)
@@ -145,7 +222,65 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("You")
+            .toolbar(.hidden, for: .navigationBar)
+            .contentMargins(.top, 8, for: .scrollContent)
+            .clearsTabBar()
         }
+    }
+
+    private func goalLabel(_ title: String, _ value: String, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+            Text(value)
+                .font(.title3.bold().monospacedDigit())
+                .foregroundStyle(color)
+        }
+    }
+
+    /// Goals follow the tabs that are turned on. Steps also shows when no
+    /// tab is on, because Summary then falls back to a steps ring.
+    private var showsStepGoal: Bool {
+        model.settings.isTabEnabled(.stepper) || model.settings.enabledTabs.isEmpty
+    }
+
+    private var enabledGoalKinds: [ActivityKind] {
+        ActivityTab.allCases.compactMap { tab in
+            guard model.settings.isTabEnabled(tab), case .kind(let kind) = tab.focus else { return nil }
+            return kind
+        }
+    }
+
+    private var energyGoalBinding: Binding<Int> {
+        Binding(
+            get: { model.settings.energyGoal(goalPeriod) },
+            set: { model.settings.setEnergyGoal($0, for: goalPeriod) }
+        )
+    }
+
+    private var stepGoalBinding: Binding<Int> {
+        Binding(
+            get: { model.settings.stepGoal(goalPeriod) },
+            set: { model.settings.setStepGoal($0, for: goalPeriod) }
+        )
+    }
+
+    private func distanceGoalBinding(_ kind: ActivityKind) -> Binding<Double> {
+        Binding(
+            get: { model.settings.distanceGoalKm(for: kind, goalPeriod) },
+            set: { model.settings.setDistanceGoalKm($0, for: kind, goalPeriod) }
+        )
+    }
+
+    private func goalTitle(_ kind: ActivityKind) -> String {
+        switch kind {
+        case .run: "Running"
+        case .jog: "Jogging"
+        case .walk: "Walk"
+        }
+    }
+
+    private func goalDistance(_ km: Double) -> String {
+        Formatters.distance(km * 1000, metric: model.settings.usesMetric)
     }
 
     private var healthButtonTitle: String {

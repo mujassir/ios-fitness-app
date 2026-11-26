@@ -1,55 +1,44 @@
-# App Review readiness: RunCheck 1.0.0 (build 2)
+# App Review readiness: RunCheck 1.1.0 (build 3)
 
-Checked on November 25, 2026 against the App Review Guidelines, the code and the App Store Connect record (app ID 6838771772). What's entered there is in `metadata.md`.
+Checked on November 26, 2026 against the App Review Guidelines, the code and the App Store Connect record (app ID 6838771772). What's entered there is in `metadata.md`.
 
-## Lessons from this review prep
+## Lessons from earlier reviews
 
-- **Unreachable features still count.** The GPS workout screen was in the code but had no tab, yet the build declared background location and asked for Motion and Health write access. That is a 2.5.4 / 5.1.1 rejection. For 1.0 the workout code is excluded from the target in `project.yml` (kept in the repo for a later version), and the permissions are gone.
-- **HealthKit needs both purpose strings.** The upload fails without `NSHealthUpdateUsageDescription`, even for a read-only app. The string says plainly that RunCheck doesn't write.
-- **The privacy manifest's "collected data" means data sent off the device.** RunCheck sends nothing, so `NSPrivacyCollectedDataTypes` is empty, and the App Privacy label should be **Data Not Collected**.
+- **Unreachable features still count.** GPS workout code stays excluded from the 1.x target in `project.yml`.
+- **HealthKit needs both purpose strings.** Read + update strings remain; the update string says RunCheck doesn't write.
+- **Privacy "collected data" means off-device.** Still empty; App Privacy stays **Data Not Collected**. The App Store update check sends only the app ID and country.
+- **New version does not inherit the screen recording attachment.** Record and attach again for 1.1.0.
 
 ## Checklist
 
 | Area | Guideline | Status |
 |---|---|---|
-| Builds and launches; onboarding → Health sheet → Stats → You | 2.1 | OK in the simulator (iPhone 17 Pro Max, iOS 26.5) and on a real iPhone (the review screen recording). |
-| Device name matches the App Store name | 2.3.7 | **Fixed.** Home Screen name, onboarding title and About now say RunCheck (was Stride). |
-| Features match the permissions | 2.5.4, 5.1.1 | **Fixed.** Removed background location, the location and motion strings, the `location-services` device capability, and Health write access. The workout code is excluded from the build. |
-| Health permission strings | 5.1.1(iii) | **Fixed.** The read string is specific. The update string says RunCheck doesn't write. |
-| Health data in iCloud or used for ads | 2.5.1, 5.1.3 | OK. SwiftData store removed; only settings in UserDefaults. No network. |
-| Clinical Health Records | 2.5.1 | OK. Entitlement removed earlier. |
-| Network, SDKs, tracking | 5.1.1, 5.1.2 | OK. No URLSession, no third-party packages. |
-| Privacy manifest | ITMS-91053 | **Fixed.** UserDefaults CA92.1 declared; no collected data; tracking false. |
-| Privacy policy link in the app | 5.1.1(i) | **Fixed.** You → About → Privacy Policy and Support. |
-| Privacy policy and support pages are live | 5.1.1(i), 1.5 | **Done.** GitHub Pages from `main` → `/docs`; both URLs return 200. |
+| Version bump | — | **Done.** `project.yml` → MARKETING_VERSION 1.1.0, CURRENT_PROJECT_VERSION 3; XcodeGen regenerated. |
+| Archive + upload | — | **Done.** Release archive uploaded; App Store Connect accepted build 1.1.0 (3). |
+| ASC version 1.1.0 created | — | **Done.** Prepare for Submission. |
+| What's New / promo / description / notes | 2.3, 2.1 | **Done.** Saved in ASC; copies in `metadata.md` and `review-notes.md`. Removed inaccurate "no internet" claims. |
+| Build attached | — | **Done.** Build 3 attached to version 1.1.0. |
+| Screen recording attachment | 2.1 | **To do (you).** Attachments do not carry over. See shot list below. |
+| Permissions match features | 2.5.4, 5.1.1 | OK. HealthKit read only; LocationService still excluded from the target. |
+| Privacy manifest | ITMS-91053 | OK. UserDefaults CA92.1; no collected data; tracking false. |
 | Export compliance | — | OK. `ITSAppUsesNonExemptEncryption = NO`. |
-| Release build hygiene | ITMS-91306 | OK. `MTL_ENABLE_DEBUG_INFO = NO` in Release. Build 2 is above build 1. |
-| Mac / Vision Pro | 2.4.5 | OK. Off in the project and in Pricing and Availability. |
-| Accounts, IAP, user content | 5.1.1(v), 3.1.1, 1.2 | Not applicable. |
-| Medical claims | 1.4.1 | OK. Stats only, no medical advice. |
-| Screenshots (iPhone slot: 1206 × 2622 or 1179 × 2556) | 2.3.3 | **Done.** 5 iPhone screenshots of the app with real data. iPhone only. |
-| Name, subtitle, keywords, description | 2.3.1, 2.3.7 | **Done.** Promotional text, description, keywords, support URL and copyright entered (`metadata.md`). No other apps' names, no GPS or workout saving, "Apple Health" only in the description. |
-| Content Rights, age rating, category | 1.3 | **Done.** No third-party content. Age rating 4+ (all None / No). Health & Fitness, Sports. |
-| App Privacy answers **Published** (Data Not Collected) | 5.1.1 | **Done.** Published. |
-| Build 2 attached to version 1.0.0 | — | **Done.** The version was created as "1.0", which hid the 1.0.0 builds; it's now 1.0.0 and build 2 is attached. |
-| Review notes | 2.1 | **Done.** Entered in App Store Connect from `review-notes.md` (3,090 characters, all six points). Sign-in required is off. |
-| Screen recording attachment | 2.1 | **Done.** `RunCheck_app_review.mp4` attached. |
-| App Review contact (name, phone, email) | 2.1 | **Done.** |
-| Pricing and availability | — | **Done.** Free; 147 countries or regions (no EU, no China mainland), like the other apps on this account. |
-| Regulated Medical Device declaration | — | **Done.** Declared "No": activity stats only, no diagnosis or treatment. |
+| Release hygiene | ITMS-91306 | OK. `MTL_ENABLE_DEBUG_INFO = NO` in Release. Build 3 > build 2. |
+| Mac / Vision Pro | 2.4.5 | OK. Off in project and availability. |
+| Accounts, IAP, UGC | 5.1.1(v), 3.1.1, 1.2 | Not applicable. |
+| Medical claims | 1.4.1 | OK. Stats only. |
+| Privacy / support URLs | 5.1.1(i), 1.5 | OK. Both return 200. |
+| App Privacy published | 5.1.1 | OK from 1.0.0 (Data Not Collected). |
+| Screenshots | 2.3.3 | Copied from 1.0.0. Optional: refresh to show Summary rings and a focus tab. |
+| Submit for Review | — | **To do.** Confirm with you after build + recording are attached. |
 
 ## Screen recording: what to record
 
-On a physical iPhone with build 2 from TestFlight:
+On a physical iPhone with build 3 from TestFlight:
 
 1. Start Screen Recording from Control Center, then go to the Home Screen.
-2. Open RunCheck. If you've already been through onboarding, delete and reinstall it from TestFlight first, so the recording shows onboarding.
-3. Tap Continue. On the Health sheet, tap Turn On All, then Allow.
-4. Stats tab: show Today, then Week, then Month. Scroll to Sessions and open one session.
-5. You tab: change the step goal and go back to Stats to show it changed. Scroll to Apple Health and About, then tap Privacy Policy.
-6. Stop the recording. AirDrop it to the Mac, rename it with a lowercase `.mp4` extension, and drag it onto **App Review Information → Attachment**.
-
-## Optional
-
-- The white "Continue" label on the bright green onboarding button has low contrast. Dark text would read better.
-- For 1.1: put the Move tab back with GPS workouts. Then restore the location strings and background mode, add Health write access, and record a new screen recording.
+2. Open RunCheck (delete/reinstall from TestFlight first if you want onboarding in the clip).
+3. Allow Health if prompted. Show Summary: Today, Week, Month, rings and walk/jog/run tiles.
+4. You → Tabs: turn on Jogging or Steps, then open that tab and show Daily/Week.
+5. Sessions: open one session detail.
+6. You → About: Check for Updates and Privacy Policy.
+7. Stop, AirDrop to the Mac, rename to a lowercase `.mp4`, drag onto **App Review Information → Attachment**.

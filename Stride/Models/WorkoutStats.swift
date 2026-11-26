@@ -2,7 +2,7 @@ import Foundation
 import HealthKit
 
 enum StatsPeriod: String, CaseIterable, Identifiable {
-    case today
+    case daily
     case week
     case month
 
@@ -10,7 +10,7 @@ enum StatsPeriod: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .today: "Today"
+        case .daily: "Daily"
         case .week: "Week"
         case .month: "Month"
         }
@@ -413,14 +413,11 @@ enum ActivitySessionBuilder {
         let workoutSessions = workouts.compactMap {
             session(from: $0, bins: bins, detection: detection, weightKilograms: weightKilograms)
         }
-        let stepSessions = ActivityKind.allCases.flatMap { kind in
-            sessions(
-                of: kind,
-                bins: bins,
-                detection: detection,
-                weightKilograms: weightKilograms
-            )
-        }
+        let stepSessions = sessions(
+            bins: bins,
+            detection: detection,
+            weightKilograms: weightKilograms
+        )
         let uniqueStepSessions = stepSessions.filter { step in
             !workoutSessions.contains { workout in
                 overlaps(step, workout)
@@ -499,50 +496,97 @@ enum ActivitySessionBuilder {
         )
     }
 
+    /// Longest stretch of slower movement a session absorbs, such as a walk
+    /// break or an easy minute in the middle of a run.
+    static let maxSlowerBreak: TimeInterval = 3 * 60
+
+    /// Builds sessions from one-minute bins. Runs are built first, then jogs,
+    /// then walks, and each bin belongs to one session only, so slower
+    /// minutes inside a run don't also show up as a separate jog or walk.
     private static func sessions(
-        of kind: ActivityKind,
         bins: [ActivityBin],
         detection: ActivityDetectionSettings,
         weightKilograms: Double
     ) -> [HealthActivitySession] {
         let classified = bins
             .sorted { $0.start < $1.start }
-            .compactMap { bin -> (ActivityBin, ActivityKind)? in
-                guard let binKind = bin.kind(using: detection) else { return nil }
-                return (bin, binKind)
+            .compactMap { bin -> (bin: ActivityBin, kind: ActivityKind)? in
+                guard let kind = bin.kind(using: detection) else { return nil }
+                return (bin, kind)
             }
 
-        let maxGap = detection.mergeGap(for: kind)
-        var groups: [[ActivityBin]] = []
-        var current: [ActivityBin] = []
+        var consumed = Set<Int>()
+        var result: [HealthActivitySession] = []
 
-        for (bin, binKind) in classified {
-            guard binKind == kind else { continue }
-            if let last = current.last {
-                let gap = bin.start.timeIntervalSince(last.end)
-                let between = classified.compactMap { item -> ActivityKind? in
-                    let other = item.0
-                    guard other.start >= last.end, other.start < bin.start else { return nil }
-                    return item.1
-                }
-                let interruptionsOK = between.allSatisfy { detection.allowsInterruption($0, for: kind) }
-                if gap <= maxGap && interruptionsOK {
-                    current.append(bin)
+        for kind in [ActivityKind.run, .jog, .walk] {
+            // Health data comes in one-minute bins, so a pause is never
+            // shorter than a minute. Join gaps below that would split a run
+            // at every missing minute.
+            let idleTolerance = max(detection.mergeGap(for: kind), ActivityBin.length)
+            var groups: [[Int]] = []
+            var current: [Int] = []
+            var lastAnchor: Int?
+
+            for index in classified.indices where classified[index].kind == kind && !consumed.contains(index) {
+                if let last = lastAnchor,
+                   canJoin(
+                       from: last,
+                       to: index,
+                       kind: kind,
+                       classified: classified,
+                       consumed: consumed,
+                       idleTolerance: idleTolerance,
+                       detection: detection
+                   ) {
+                    current.append(contentsOf: (last + 1)...index)
                 } else {
-                    groups.append(current)
-                    current = [bin]
+                    if !current.isEmpty { groups.append(current) }
+                    current = [index]
                 }
-            } else {
-                current = [bin]
+                lastAnchor = index
+            }
+            if !current.isEmpty { groups.append(current) }
+
+            for group in groups {
+                consumed.formUnion(group)
+                if let session = session(
+                    fromBins: group.map { classified[$0].bin },
+                    kind: kind,
+                    weightKilograms: weightKilograms
+                ) {
+                    result.append(session)
+                }
             }
         }
-        if !current.isEmpty {
-            groups.append(current)
-        }
+        return result
+    }
 
-        return groups.compactMap { group in
-            session(fromBins: group, kind: kind, weightKilograms: weightKilograms)
+    /// Whether two bins of the same kind belong to one session: nothing in
+    /// between was claimed by a faster session, the movement in between is an
+    /// allowed interruption (slower for runs and jogs, none for walks), no
+    /// pause is longer than the join gap, and the slower stretch is short.
+    private static func canJoin(
+        from last: Int,
+        to next: Int,
+        kind: ActivityKind,
+        classified: [(bin: ActivityBin, kind: ActivityKind)],
+        consumed: Set<Int>,
+        idleTolerance: TimeInterval,
+        detection: ActivityDetectionSettings
+    ) -> Bool {
+        let between = (last + 1)..<next
+        guard between.allSatisfy({ !consumed.contains($0) }) else { return false }
+        guard between.allSatisfy({ detection.allowsInterruption(classified[$0].kind, for: kind) }) else {
+            return false
         }
+        var previousEnd = classified[last].bin.end
+        for index in (last + 1)...next {
+            let idle = classified[index].bin.start.timeIntervalSince(previousEnd)
+            if idle > idleTolerance { return false }
+            previousEnd = classified[index].bin.end
+        }
+        let span = classified[next].bin.start.timeIntervalSince(classified[last].bin.end)
+        return span <= max(idleTolerance, maxSlowerBreak)
     }
 
     private static func session(
@@ -574,5 +618,81 @@ enum ActivitySessionBuilder {
             source: .steps,
             samples: bins.map(SessionSample.init(bin:))
         )
+    }
+}
+
+/// One kilometre (or mile) of a session.
+struct SessionSplit: Identifiable, Hashable {
+    let index: Int
+    /// Full split length, or the leftover distance for the last one.
+    let distanceMeters: Double
+    let duration: TimeInterval
+    let isPartial: Bool
+
+    var id: Int { index }
+
+    var speedKmh: Double {
+        duration > 0 ? distanceMeters / duration * 3.6 : 0
+    }
+}
+
+extension HealthActivitySession {
+    /// Time and speed for each `unitMeters` of the session, worked out from
+    /// its one-minute samples. A boundary inside a minute splits that minute
+    /// in proportion. Sample distances are scaled to the session's distance
+    /// so the splits add up to the total shown.
+    func splits(unitMeters: Double) -> [SessionSplit] {
+        let samples = self.samples.sorted { $0.start < $1.start }
+        guard unitMeters > 0, !samples.isEmpty else { return [] }
+        let length = ActivityBin.length
+        let raw = samples.map { sample in
+            sample.distanceMeters > 1 ? sample.distanceMeters : sample.speedKmh / 3.6 * length
+        }
+        let rawTotal = raw.reduce(0, +)
+        guard rawTotal > 0 else { return [] }
+        let scale = distanceMeters > 1 ? distanceMeters / rawTotal : 1
+
+        var splits: [SessionSplit] = []
+        var covered = 0.0            // distance so far
+        var splitStart = samples[0].start
+        var lastTime = samples[0].start
+
+        for (sample, rawDistance) in zip(samples, raw) {
+            let distance = rawDistance * scale
+            guard distance > 0 else {
+                lastTime = sample.start.addingTimeInterval(length)
+                continue
+            }
+            var used = 0.0
+            // Every boundary this minute crosses closes a split.
+            while covered + (distance - used) >= Double(splits.count + 1) * unitMeters {
+                let needed = Double(splits.count + 1) * unitMeters - covered
+                used += needed
+                covered += needed
+                let crossing = sample.start.addingTimeInterval(length * used / distance)
+                splits.append(SessionSplit(
+                    index: splits.count + 1,
+                    distanceMeters: unitMeters,
+                    duration: crossing.timeIntervalSince(splitStart),
+                    isPartial: false
+                ))
+                splitStart = crossing
+            }
+            covered += distance - used
+            lastTime = sample.start.addingTimeInterval(length)
+        }
+
+        let leftover = covered - Double(splits.count) * unitMeters
+        // Skip a sliver at the end (under 5% of a split) that would show a
+        // misleading speed.
+        if leftover > unitMeters * 0.05 {
+            splits.append(SessionSplit(
+                index: splits.count + 1,
+                distanceMeters: leftover,
+                duration: lastTime.timeIntervalSince(splitStart),
+                isPartial: true
+            ))
+        }
+        return splits
     }
 }

@@ -14,6 +14,21 @@ final class HealthKitService {
     var dailyMetrics: [HealthDaySummary] = []
     private var rawBins: [ActivityBin] = []
     private var rawWorkouts: [HKWorkout] = []
+
+    /// Session detection is the slow part of Week and Month. Results are kept
+    /// per date range until Health data is loaded again.
+    struct RangeKey: Hashable {
+        let start: Date
+        let end: Date
+        let detection: ActivityDetectionSettings
+        let weightKilograms: Double
+    }
+
+    @ObservationIgnored private var detectionCache: [RangeKey: ActivityDetectionResult] = [:]
+    @ObservationIgnored private var dataGeneration = 0
+    /// Changes when new data loads or a background preparation finishes, so
+    /// views waiting on a range check again.
+    private(set) var preparedVersion = 0
     var isAuthorized = false
     var isRequesting = false
     var isLoadingStats = false
@@ -149,6 +164,9 @@ final class HealthKitService {
         rawWorkouts = await samples
         dailyMetrics = await days
         rawBins = await bins
+        detectionCache = [:]
+        dataGeneration += 1
+        preparedVersion += 1
         loadedFrom = origin
         hasLoadedStats = true
         if dailyMetrics.contains(where: { $0.hasActivity }) || !rawBins.isEmpty || !rawWorkouts.isEmpty {
@@ -173,14 +191,9 @@ final class HealthKitService {
         detection: ActivityDetectionSettings,
         weightKilograms: Double
     ) -> ActivityStatsBreakdown {
-        let calendar = Calendar.current
-        let dayStart = calendar.startOfDay(for: date)
-        let result = detect(
-            bins: rawBins.filter { calendar.isDate($0.start, inSameDayAs: dayStart) },
-            workouts: rawWorkouts.filter { calendar.isDate($0.startDate, inSameDayAs: dayStart) },
-            detection: detection,
-            weightKilograms: weightKilograms
-        )
+        let range = Self.dayRange(date)
+        let dayStart = range.start
+        let result = detectRange(range, detection: detection, weightKilograms: weightKilograms)
         return .day(
             date: dayStart,
             metrics: metrics(on: dayStart),
@@ -193,17 +206,27 @@ final class HealthKitService {
         detection: ActivityDetectionSettings,
         weightKilograms: Double
     ) -> ActivityStatsBreakdown {
-        let calendar = Calendar.current
-        let monthStart = calendar.dateInterval(of: .month, for: .now)?.start ?? calendar.startOfDay(for: .now)
-        let result = detect(
-            bins: rawBins.filter { $0.start >= monthStart },
-            workouts: rawWorkouts.filter { $0.startDate >= monthStart },
-            detection: detection,
-            weightKilograms: weightKilograms
-        )
+        let range = Self.monthRange()
+        let monthStart = range.start
+        let result = detectRange(range, detection: detection, weightKilograms: weightKilograms)
         return .month(
             sessions: result.listedSessions,
             days: dailyMetrics.filter { $0.date >= monthStart },
+            byKind: result.byKind
+        )
+    }
+
+    /// Totals and sessions for [start, end), e.g. one week.
+    func rangeStats(
+        from start: Date,
+        to end: Date,
+        detection: ActivityDetectionSettings,
+        weightKilograms: Double
+    ) -> ActivityStatsBreakdown {
+        let result = detectRange((start, end), detection: detection, weightKilograms: weightKilograms)
+        return .month(
+            sessions: result.listedSessions,
+            days: dailyMetrics.filter { $0.date >= start && $0.date < end },
             byKind: result.byKind
         )
     }
@@ -217,12 +240,7 @@ final class HealthKitService {
         return StatsPeriod.weekStarts(inMonthOf: date).map { start in
             let end = calendar.date(byAdding: .weekOfYear, value: 1, to: start) ?? start.addingTimeInterval(7 * 24 * 3600)
             let days = dailyMetrics.filter { $0.date >= start && $0.date < end }
-            let result = detect(
-                bins: rawBins.filter { $0.start >= start && $0.start < end },
-                workouts: rawWorkouts.filter { $0.startDate >= start && $0.startDate < end },
-                detection: detection,
-                weightKilograms: weightKilograms
-            )
+            let result = detectRange((start, end), detection: detection, weightKilograms: weightKilograms)
             var duration = days.reduce(0.0) { $0 + $1.exerciseSeconds }
             if duration < 1 {
                 duration = result.listedSessions.reduce(0) { $0 + $1.duration }
@@ -243,18 +261,81 @@ final class HealthKitService {
         }
     }
 
-    private func detect(
-        bins: [ActivityBin],
-        workouts: [HKWorkout],
+    typealias DateRange = (start: Date, end: Date)
+
+    static func dayRange(_ date: Date) -> DateRange {
+        let calendar = Calendar.current
+        let start = calendar.startOfDay(for: date)
+        return (start, calendar.date(byAdding: .day, value: 1, to: start) ?? start.addingTimeInterval(86_400))
+    }
+
+    static func monthRange() -> DateRange {
+        let calendar = Calendar.current
+        let start = calendar.dateInterval(of: .month, for: .now)?.start ?? calendar.startOfDay(for: .now)
+        return (start, .distantFuture)
+    }
+
+    static func weekRange(_ start: Date) -> DateRange {
+        let end = StatsPeriod.sundayCalendar.date(byAdding: .weekOfYear, value: 1, to: start)
+            ?? start.addingTimeInterval(7 * 86_400)
+        return (start, end)
+    }
+
+    /// Every range the Month view reads: the month and each of its weeks.
+    static func monthRanges() -> [DateRange] {
+        [monthRange()] + StatsPeriod.weekStarts(inMonthOf: .now).map(weekRange)
+    }
+
+    private func key(_ range: DateRange, _ detection: ActivityDetectionSettings, _ weight: Double) -> RangeKey {
+        RangeKey(start: range.start, end: range.end, detection: detection, weightKilograms: weight)
+    }
+
+    private func detectRange(
+        _ range: DateRange,
         detection: ActivityDetectionSettings,
         weightKilograms: Double
     ) -> ActivityDetectionResult {
-        ActivitySessionBuilder.detect(
-            bins: bins,
-            workouts: workouts,
+        let key = key(range, detection, weightKilograms)
+        if let cached = detectionCache[key] { return cached }
+        let result = ActivitySessionBuilder.detect(
+            bins: rawBins.filter { $0.start >= range.start && $0.start < range.end },
+            workouts: rawWorkouts.filter { $0.startDate >= range.start && $0.startDate < range.end },
             detection: detection,
             weightKilograms: weightKilograms
         )
+        detectionCache[key] = result
+        return result
+    }
+
+    /// True when every range is already worked out, so the view can draw at once.
+    func isPrepared(_ ranges: [DateRange], detection: ActivityDetectionSettings, weightKilograms: Double) -> Bool {
+        ranges.allSatisfy { detectionCache[key($0, detection, weightKilograms)] != nil }
+    }
+
+    /// Works out the given ranges off the main thread so the screen stays
+    /// responsive and a loader can show meanwhile.
+    func prepare(_ ranges: [DateRange], detection: ActivityDetectionSettings, weightKilograms: Double) async {
+        let generation = dataGeneration
+        var added = false
+        for range in ranges {
+            let key = key(range, detection, weightKilograms)
+            guard detectionCache[key] == nil else { continue }
+            let bins = rawBins.filter { $0.start >= range.start && $0.start < range.end }
+            let workouts = rawWorkouts.filter { $0.startDate >= range.start && $0.startDate < range.end }
+            let result = await Task.detached(priority: .userInitiated) {
+                ActivitySessionBuilder.detect(
+                    bins: bins,
+                    workouts: workouts,
+                    detection: detection,
+                    weightKilograms: weightKilograms
+                )
+            }.value
+            // Data reloaded meanwhile: these results are stale.
+            guard generation == dataGeneration else { return }
+            detectionCache[key] = result
+            added = true
+        }
+        if added { preparedVersion += 1 }
     }
 
     func startObserving() async {
